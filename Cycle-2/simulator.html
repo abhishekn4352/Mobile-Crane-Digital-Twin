@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Mobile Crane Digital Twin — Grove GMK5250L-1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+/* ============================= RESET & BASE ============================= */
+*,*::before,*::after{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:#000;
+  color:#f2ece1;
+  font-family:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+button{font-family:inherit;}
+ul,ol{margin:0;padding:0;list-style:none;}
+h1,h2,h3,p{margin:0;}
+a{color:inherit;}
+button,input{font:inherit;color:inherit;}
+button{cursor:pointer;}
+:focus-visible{outline:2px solid #ffc22e;outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;}
+}
+
+/* ============================= DESIGN TOKENS ============================= */
+:root{
+  --bg-app:#0a0c0f;
+  --bg-panel:#14181d;
+  --bg-panel-2:#111418;
+  --bg-card:#181d23;
+  --bg-card-2:#1c2229;
+  --border:rgba(255,255,255,0.09);
+  --border-strong:rgba(255,255,255,0.17);
+  --text-1:#f2ece1;
+  --text-2:#9aa3ac;
+  --text-3:#6b7480;
+  --yellow:#ffc22e;
+  --yellow-dim:rgba(255,194,46,0.13);
+  --yellow-dim-strong:rgba(255,194,46,0.22);
+  --green:#22c55e;
+  --green-dim:rgba(34,197,94,0.14);
+  --orange:#f59e0b;
+  --orange-dim:rgba(245,158,11,0.14);
+  --red:#ef4444;
+  --red-dim:rgba(239,68,68,0.15);
+  --r-lg:12px;
+  --r-md:10px;
+  --r-sm:6px;
+  --shadow-card:0 2px 10px rgba(0,0,0,0.4);
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Consolas,monospace;
+}
+
+/* ============================= LAYOUT ============================= */
+.app{
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+  background:
+    radial-gradient(ellipse 1200px 600px at 15% -10%, rgba(255,194,46,0.05), transparent 60%),
+    var(--bg-app);
+}
+
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+  height:72px;
+  padding:0 28px;
+  background:var(--bg-panel);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+  position:relative;
+  z-index:20;
+}
+.brand-left{display:flex;align-items:center;gap:12px;min-width:0;}
+.brand-logo{color:var(--yellow);flex-shrink:0;width:34px;height:34px;}
+.brand-text{display:flex;flex-direction:column;line-height:1.18;white-space:nowrap;}
+.brand-title{font-size:16px;font-weight:700;letter-spacing:0.04em;color:var(--text-1);}
+.brand-subtitle{font-size:16px;font-weight:700;letter-spacing:0.04em;color:var(--yellow);}
+
+.main-nav{display:flex;align-items:center;gap:4px;background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:10px;padding:4px;}
+.nav-tab{
+  background:transparent;border:none;color:var(--text-2);
+  font-size:12.5px;font-weight:600;letter-spacing:0.06em;
+  padding:9px 16px;border-radius:7px;
+  transition:background 0.15s ease,color 0.15s ease;
+  white-space:nowrap;
+}
+.nav-tab:hover{color:var(--text-1);}
+.nav-tab.active{background:var(--yellow);color:#1a1300;}
+
+.brand-right{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;white-space:nowrap;}
+.brand-manufacturer{font-size:15px;font-weight:700;letter-spacing:0.08em;color:var(--text-1);}
+.brand-model{font-size:11.5px;font-weight:500;letter-spacing:0.05em;color:var(--text-2);}
+
+.dashboard{
+  flex:1;
+  display:grid;
+  grid-template-columns:1.32fr 1fr 0.92fr;
+  gap:18px;
+  padding:18px;
+  align-items:stretch;
+  min-height:0;
+}
+
+.footer{
+  display:flex;align-items:center;justify-content:space-between;
+  height:52px;padding:0 28px;
+  background:var(--bg-panel);border-top:1px solid var(--border);
+  flex-shrink:0;flex-wrap:wrap;gap:8px;
+}
+.footer-left{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2);}
+.footer-left svg{color:var(--yellow);width:20px;height:20px;flex-shrink:0;}
+.footer-left b{color:var(--text-1);font-weight:600;}
+.footer-sep{color:var(--border-strong);margin:0 8px;}
+.footer-right{font-size:11px;font-weight:600;letter-spacing:0.08em;color:var(--yellow);white-space:nowrap;}
+.footer-right span.sep{color:var(--text-3);margin:0 8px;}
+
+/* ============================= PANEL SHELLS ============================= */
+.panel{
+  background:var(--bg-panel);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  box-shadow:var(--shadow-card);
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+.panel-scroll{overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:16px;}
+.panel-title-row{display:flex;align-items:center;gap:10px;margin-bottom:2px;}
+.panel-title-row svg{color:var(--yellow);width:19px;height:19px;flex-shrink:0;}
+.panel-title-row h2{font-size:15.5px;font-weight:600;color:var(--text-1);letter-spacing:0.01em;}
+.data-badge{
+  margin-left:auto;font-size:10px;font-weight:700;letter-spacing:0.06em;
+  color:var(--yellow);background:var(--yellow-dim);border:1px solid rgba(255,194,46,0.35);
+  padding:4px 8px;border-radius:20px;cursor:default;white-space:nowrap;
+}
+
+/* ============================= LEFT: 3D VIEWER ============================= */
+.panel-viewer{padding:0;overflow:hidden;position:relative;}
+.viewport-3d{
+  position:relative;width:100%;height:100%;min-height:520px;
+  background:linear-gradient(180deg,#5f95c9 0%,#8fb7d8 38%,#c3d3c4 64%,#7c8468 78%,#5c634c 100%);
+  overflow:hidden;
+}
+.viewport-3d canvas{position:absolute;inset:0;display:block;width:100%!important;height:100%!important;}
+
+.view-toggle-group{
+  position:absolute;top:14px;left:14px;z-index:5;
+  display:flex;background:rgba(10,12,15,0.55);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:9px;padding:3px;gap:2px;
+}
+.view-toggle-btn{
+  background:transparent;border:none;color:#e8e2d6;
+  font-size:12px;font-weight:600;padding:8px 14px;border-radius:6px;
+  transition:background 0.15s ease,color 0.15s ease;white-space:nowrap;
+}
+.view-toggle-btn.active{background:var(--yellow);color:#1a1300;}
+.view-toggle-btn:not(.active):hover{background:rgba(255,255,255,0.12);}
+
+.reset-camera-btn{
+  position:absolute;top:14px;right:14px;z-index:5;
+  width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  background:rgba(10,12,15,0.55);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#e8e2d6;
+  transition:background 0.15s ease,transform 0.4s ease;
+}
+.reset-camera-btn:hover{background:rgba(255,255,255,0.15);}
+.reset-camera-btn svg{width:17px;height:17px;}
+.reset-camera-btn.spinning svg{transform:rotate(360deg);}
+
+.vertical-toolbar{
+  position:absolute;top:64px;left:14px;z-index:5;
+  display:flex;flex-direction:column;gap:2px;
+  background:rgba(10,12,15,0.55);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:9px;padding:4px;
+}
+.toolbar-btn{
+  width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:none;border-radius:6px;color:#cfc9bc;
+  transition:background 0.15s ease,color 0.15s ease;
+}
+.toolbar-btn svg{width:17px;height:17px;}
+.toolbar-btn.active{background:var(--yellow);color:#1a1300;}
+.toolbar-btn:not(.active):hover{background:rgba(255,255,255,0.14);color:#fff;}
+
+.compass{
+  position:absolute;bottom:16px;left:16px;z-index:5;
+  width:74px;height:74px;border-radius:50%;
+  background:rgba(10,12,15,0.5);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.18);
+  display:flex;align-items:center;justify-content:center;
+}
+.compass span{position:absolute;font-size:9.5px;font-weight:700;color:#dcd6c8;letter-spacing:0.02em;}
+.compass .compass-n{top:5px;left:50%;transform:translateX(-50%);color:var(--yellow);}
+.compass .compass-s{bottom:5px;left:50%;transform:translateX(-50%);}
+.compass .compass-e{right:6px;top:50%;transform:translateY(-50%);}
+.compass .compass-w{left:6px;top:50%;transform:translateY(-50%);}
+.compass-needle{width:20px;height:20px;transform-origin:50% 50%;}
+
+.viewport-legend{
+  position:absolute;bottom:16px;right:16px;z-index:5;
+  background:rgba(10,12,15,0.6);backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,0.15);border-radius:9px;
+  padding:10px 13px;display:flex;flex-direction:column;gap:7px;
+}
+.legend-item{display:flex;align-items:center;gap:8px;font-size:11.5px;color:#e8e2d6;white-space:nowrap;}
+.legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.legend-dot-green{background:var(--green);box-shadow:0 0 5px rgba(34,197,94,0.7);}
+.legend-dash{width:14px;height:0;border-top:2px dashed var(--yellow);flex-shrink:0;}
+
+/* ============================= CENTER: SENSOR PANEL ============================= */
+.sensor-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.sensor-card{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:14px 15px;display:flex;flex-direction:column;gap:9px;min-width:0;
+}
+.sensor-card-head{display:flex;align-items:center;gap:8px;color:var(--text-2);font-size:12px;font-weight:600;}
+.sensor-card-head svg{width:15px;height:15px;color:var(--yellow);flex-shrink:0;}
+.sensor-value{display:flex;align-items:baseline;gap:5px;font-family:var(--mono);}
+.sensor-value span:first-child{font-size:27px;font-weight:600;color:var(--text-1);font-variant-numeric:tabular-nums;line-height:1;}
+.sensor-value .unit{font-size:13px;color:var(--text-2);font-weight:500;}
+.sensor-value-text span:first-child{font-size:19px;letter-spacing:0.01em;}
+.check-icon{color:var(--green);width:18px;height:18px;}
+.check-icon svg{width:100%;height:100%;}
+.progress-track{height:5px;border-radius:3px;background:#262b31;overflow:hidden;}
+.progress-fill{height:100%;border-radius:3px;background:var(--green);width:0%;transition:width 0.25s ease,background-color 0.25s ease;}
+.progress-fill-neutral{background:var(--yellow);}
+.sensor-caption{font-size:11px;color:var(--text-3);line-height:1.5;}
+
+.status-bar{
+  display:flex;align-items:stretch;
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:14px 16px;gap:16px;
+}
+.status-segment{display:flex;align-items:center;gap:10px;flex:1;min-width:0;}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--green);box-shadow:0 0 6px rgba(34,197,94,0.7);}
+.status-dot-green{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,0.7);}
+.status-icon-ok{color:var(--green);width:22px;height:22px;flex-shrink:0;}
+.status-icon-ok svg{width:100%;height:100%;}
+.status-label{font-size:10.5px;color:var(--text-3);font-weight:500;letter-spacing:0.02em;margin-bottom:2px;}
+.status-value{font-size:14.5px;font-weight:700;color:var(--green);letter-spacing:0.02em;}
+.status-divider{width:1px;background:var(--border-strong);flex-shrink:0;}
+
+/* ============================= RIGHT: LOAD CHART + CONTROLS ============================= */
+.panel-block{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:15px;display:flex;flex-direction:column;gap:13px;
+}
+.lc-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.lc-field label{display:block;font-size:10.5px;color:var(--text-3);font-weight:500;margin-bottom:6px;letter-spacing:0.02em;}
+.lc-display{
+  background:var(--bg-card-2);border:1px solid var(--border-strong);border-radius:var(--r-sm);
+  padding:9px 11px;font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--text-1);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.lc-display svg{width:13px;height:13px;color:var(--text-3);}
+
+.rated-capacity-box{
+  background:linear-gradient(180deg,var(--yellow-dim-strong),var(--yellow-dim));
+  border:1px solid rgba(255,194,46,0.4);border-radius:var(--r-md);padding:13px 15px;
+}
+.rc-label-row{display:flex;align-items:center;gap:7px;margin-bottom:6px;}
+.rc-label{font-size:11.5px;font-weight:600;color:#e8c878;letter-spacing:0.02em;}
+.info-btn{
+  position:relative;width:15px;height:15px;border-radius:50%;
+  background:rgba(255,194,46,0.25);border:1px solid rgba(255,194,46,0.5);
+  color:#e8c878;font-size:10px;font-weight:700;font-style:italic;
+  display:flex;align-items:center;justify-content:center;padding:0;font-family:Georgia,serif;
+}
+.info-btn .tooltip{
+  display:none;position:absolute;top:22px;left:50%;transform:translateX(-50%);
+  width:230px;background:#1c2229;border:1px solid var(--border-strong);border-radius:8px;
+  padding:10px 12px;font-size:11px;font-weight:400;font-style:normal;line-height:1.5;color:var(--text-2);
+  box-shadow:0 6px 20px rgba(0,0,0,0.5);z-index:30;text-align:left;
+}
+.info-btn:hover .tooltip,.info-btn:focus-visible .tooltip{display:block;}
+.rc-value{font-family:var(--mono);font-size:34px;font-weight:700;color:var(--yellow);line-height:1;}
+.rc-value .unit{font-size:15px;color:#e8c878;font-weight:500;margin-left:4px;}
+
+.interp-title{font-size:11.5px;font-weight:600;color:var(--text-2);margin-bottom:9px;letter-spacing:0.02em;}
+.interp-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.interp-table th{
+  text-align:right;font-weight:500;color:var(--text-3);padding:0 0 7px;font-size:10px;
+  letter-spacing:0.02em;border-bottom:1px solid var(--border);
+}
+.interp-table th:first-child,.interp-table td:first-child{text-align:left;}
+.interp-table td{text-align:right;padding:7px 0;color:var(--text-1);font-family:var(--mono);border-bottom:1px solid rgba(255,255,255,0.05);}
+.interp-table td.diff-ok{color:var(--green);}
+.tolerance-banner{
+  margin-top:10px;display:flex;align-items:center;gap:8px;
+  background:var(--green-dim);border:1px solid rgba(34,197,94,0.35);border-radius:var(--r-sm);
+  padding:8px 11px;font-size:11.5px;color:#7fe0a3;font-weight:500;
+}
+
+.control-group{display:flex;flex-direction:column;gap:7px;}
+.control-label-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.control-label-row label{font-size:12px;font-weight:500;color:var(--text-2);}
+.control-number{
+  width:64px;background:var(--bg-card-2);border:1px solid var(--border-strong);border-radius:var(--r-sm);
+  color:var(--text-1);font-family:var(--mono);font-size:12.5px;font-weight:600;padding:5px 7px;text-align:right;
+}
+.control-number::-webkit-inner-spin-button,.control-number::-webkit-outer-spin-button{opacity:0.5;}
+input[type=range].control-slider{
+  -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+  background:linear-gradient(to right,var(--yellow) 0%,var(--yellow) 50%,#262b31 50%,#262b31 100%);
+  outline:none;cursor:pointer;
+}
+input[type=range].control-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--yellow);border:2px solid #16130a;box-shadow:0 1px 4px rgba(0,0,0,0.5);cursor:pointer;
+  margin-top:0;
+}
+input[type=range].control-slider::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--yellow);border:2px solid #16130a;cursor:pointer;
+}
+input[type=range].control-slider::-moz-range-track{height:4px;border-radius:3px;background:#262b31;}
+.control-range-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--text-3);}
+.control-group-toggle{flex-direction:row;align-items:center;justify-content:space-between;padding-top:2px;}
+.toggle-wrap{display:flex;align-items:center;gap:10px;}
+.toggle-switch{
+  width:42px;height:24px;border-radius:12px;background:#262b31;border:1px solid var(--border-strong);
+  position:relative;transition:background 0.2s ease;padding:0;flex-shrink:0;
+}
+.toggle-switch.active{background:var(--yellow);}
+.toggle-knob{
+  position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#e8e2d6;
+  transition:transform 0.2s ease;box-shadow:0 1px 3px rgba(0,0,0,0.4);
+}
+.toggle-switch.active .toggle-knob{transform:translateX(18px);background:#1a1300;}
+#outrigger-toggle-label{font-size:12.5px;font-weight:600;color:var(--text-1);}
+
+/* ============================= MODAL (SETTINGS) ============================= */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(3px);
+  display:none;align-items:center;justify-content:center;z-index:100;padding:20px;
+}
+.modal-overlay.open{display:flex;}
+.modal-box{
+  width:100%;max-width:380px;background:var(--bg-panel);border:1px solid var(--border-strong);
+  border-radius:var(--r-lg);box-shadow:0 20px 60px rgba(0,0,0,0.6);overflow:hidden;
+}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);}
+.modal-header h3{font-size:14.5px;font-weight:600;}
+.modal-header button{background:transparent;border:none;color:var(--text-2);font-size:20px;line-height:1;padding:2px 4px;}
+.modal-header button:hover{color:var(--text-1);}
+.modal-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px;}
+.settings-row{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;padding:2px 0;}
+.settings-row span:first-child{color:var(--text-2);}
+.settings-row .settings-value{color:var(--text-1);font-weight:600;}
+.reset-btn{
+  margin-top:6px;background:var(--yellow-dim);border:1px solid rgba(255,194,46,0.4);color:var(--yellow);
+  font-weight:600;font-size:12.5px;padding:10px;border-radius:var(--r-sm);transition:background 0.15s ease;
+}
+.reset-btn:hover{background:var(--yellow-dim-strong);}
+.settings-note{font-size:11px;color:var(--text-3);line-height:1.5;padding-top:4px;border-top:1px solid var(--border);}
+
+/* ============================= RESPONSIVE ============================= */
+@media (max-width:1180px){
+  .dashboard{grid-template-columns:1fr;}
+  .panel-viewer{height:480px;}
+}
+@media (max-width:640px){
+  .topbar{padding:0 14px;height:auto;flex-wrap:wrap;padding-top:10px;padding-bottom:10px;gap:10px;}
+  .main-nav{order:3;width:100%;overflow-x:auto;}
+  .brand-right{align-items:flex-start;}
+  .dashboard{padding:12px;gap:12px;}
+  .sensor-grid{grid-template-columns:1fr;}
+  .lc-inputs{grid-template-columns:1fr;}
+  .footer{flex-direction:column;align-items:flex-start;padding:10px 14px;height:auto;gap:6px;}
+  .panel-scroll{padding:14px;}
+  .panel-viewer{height:400px;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand-left">
+      <svg class="brand-logo" viewBox="0 0 32 32" fill="none">
+        <circle cx="6.5" cy="26" r="2" fill="currentColor"/>
+        <path d="M2 26.5h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M6.5 24V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M6.5 13L27 5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M27 5.5v4.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M19.5 8.4V18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="1 2.4"/>
+        <path d="M19.5 18h3.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-title">MOBILE CRANE</span>
+        <span class="brand-subtitle">DIGITAL TWIN</span>
+      </div>
+    </div>
+
+    <nav class="main-nav" id="main-nav">
+      <button class="nav-tab active" data-tab="simulator">SIMULATOR</button>
+      <button class="nav-tab" data-tab="loadchart">LOAD CHART</button>
+      <button class="nav-tab" data-tab="sensors">SENSORS</button>
+      <button class="nav-tab" data-tab="stability">STABILITY</button>
+      <button class="nav-tab" data-tab="settings">SETTINGS</button>
+    </nav>
+
+    <div class="brand-right">
+      <span class="brand-manufacturer">GROVE</span>
+      <span class="brand-model">GMK5250L-1</span>
+    </div>
+  </header>
+
+  <main class="dashboard">
+
+    <!-- ============ LEFT: 3D SIMULATOR ============ -->
+    <section class="panel panel-viewer">
+      <div class="viewport-3d" id="viewport-3d">
+        <div class="view-toggle-group">
+          <button class="view-toggle-btn active" data-view="crane">Crane View</button>
+          <button class="view-toggle-btn" data-view="top">Top View</button>
+        </div>
+        <button class="reset-camera-btn" id="reset-camera-btn" title="Reset Camera" aria-label="Reset Camera">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+        </button>
+
+        <div class="vertical-toolbar">
+          <button class="toolbar-btn active" id="toolbar-crane-btn" title="Crane / Simulation" aria-label="Crane view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h8"/><path d="M6 21V9"/><path d="M6 9l15-4.5"/><path d="M21 4.5v3.5"/><path d="M14.5 6.8V15"/><path d="M14.5 15h3.5"/></svg>
+          </button>
+          <button class="toolbar-btn" id="toolbar-camera-btn" title="Toggle auto-rotate" aria-label="Toggle auto-rotate">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.4"/></svg>
+          </button>
+          <button class="toolbar-btn" id="toolbar-settings-btn" title="Settings" aria-label="Open settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.6" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
+
+        <div class="compass" aria-hidden="true">
+          <span class="compass-n">N</span><span class="compass-e">E</span><span class="compass-s">S</span><span class="compass-w">W</span>
+          <svg class="compass-needle" id="compass-needle" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3l3.4 9L12 21l-3.4-9z" fill="#ffc22e" opacity="0.9"/>
+          </svg>
+        </div>
+
+        <div class="viewport-legend">
+          <div class="legend-item"><span class="legend-dot legend-dot-green"></span>Load Position</div>
+          <div class="legend-item"><span class="legend-dash"></span>Support Polygon</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CENTER: LIVE SENSOR PANEL ============ -->
+    <section class="panel panel-sensors">
+      <div class="panel-scroll">
+        <div class="panel-title-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg>
+          <h2>Live Sensor Panel</h2>
+        </div>
+
+        <div class="sensor-grid">
+          <div class="sensor-card" id="card-load">
+            <div class="sensor-card-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3.5"/><rect x="5" y="8.5" width="14" height="12" rx="1.6"/></svg><span>Load</span></div>
+            <div class="sensor-value"><span id="sensor-load-value">12.5</span><span class="unit">t</span></div>
+            <div class="progress-track"><div class="progress-fill" id="sensor-load-bar"></div></div>
+            <div class="sensor-caption" id="sensor-load-caption">Max (at this config): — t</div>
+          </div>
+
+          <div class="sensor-card" id="card-angle">
+            <div class="sensor-card-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"/><path d="M4 20L17 6"/><path d="M4 14a9 9 0 0 1 6-8"/></svg><span>Boom Angle</span></div>
+            <div class="sensor-value"><span id="sensor-angle-value">42.3</span><span class="unit">°</span></div>
+            <div class="progress-track"><div class="progress-fill progress-fill-neutral" id="sensor-angle-bar"></div></div>
+            <div class="sensor-caption">Range: 0° – 85°</div>
+          </div>
+
+          <div class="sensor-card" id="card-boomlength">
+            <div class="sensor-card-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M3 12l4.2-4.2"/><path d="M3 12l4.2 4.2"/><path d="M21 12l-4.2-4.2"/><path d="M21 12l-4.2 4.2"/></svg><span>Boom Length</span></div>
+            <div class="sensor-value"><span id="sensor-boomlength-value">28.0</span><span class="unit">m</span></div>
+            <div class="progress-track"><div class="progress-fill progress-fill-neutral" id="sensor-boomlength-bar"></div></div>
+            <div class="sensor-caption">Range: 10 m – 60 m</div>
+          </div>
+
+          <div class="sensor-card" id="card-radius">
+            <div class="sensor-card-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg><span>Working Radius</span></div>
+            <div class="sensor-value"><span id="sensor-radius-value">18.7</span><span class="unit">m</span></div>
+            <div class="progress-track"><div class="progress-fill progress-fill-neutral" id="sensor-radius-bar"></div></div>
+            <div class="sensor-caption">L × cos θ + offset</div>
+          </div>
+
+          <div class="sensor-card" id="card-outrigger">
+            <div class="sensor-card-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5v19"/><path d="M2.5 12h19"/><path d="M6 6L3 3M18 6l3-3M6 18l-3 3M18 18l3 3"/></svg><span>Outrigger Condition</span></div>
+            <div class="sensor-value sensor-value-text"><span id="sensor-outrigger-status">Deployed</span><span class="check-icon" id="sensor-outrigger-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span></div>
+            <div class="sensor-caption" id="sensor-outrigger-caption">All 4 outriggers extended</div>
+          </div>
+
+          <div class="sensor-card" id="card-pressure">
+            <div class="sensor-card-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16a7.5 7.5 0 1 1 15 0"/><path d="M12 16l4-5.2"/><circle cx="12" cy="16" r="1.1" fill="currentColor" stroke="none"/></svg><span>Hydraulic Pressure</span></div>
+            <div class="sensor-value"><span id="sensor-pressure-value">185</span><span class="unit">bar</span></div>
+            <div class="progress-track"><div class="progress-fill" id="sensor-pressure-bar"></div></div>
+            <div class="sensor-caption">Modelled from current load<br>Range: 0 – 320 bar</div>
+          </div>
+        </div>
+
+        <div class="status-bar">
+          <div class="status-segment">
+            <span class="status-icon-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M7.5 12.5l3 3 6-6.5"/></svg></span>
+            <div><div class="status-label">System Status</div><div class="status-value" id="status-operational-value" title="Based on load chart limits: current load vs rated capacity">OPERATIONAL</div></div>
+          </div>
+          <div class="status-divider"></div>
+          <div class="status-segment">
+            <span class="status-dot" id="status-stability-dot"></span>
+            <div><div class="status-label">Stability</div><div class="status-value" id="status-stability-value" title="Based on the outrigger support polygon: an independent physical tipping check">SAFE</div></div>
+          </div>
+          <div class="status-divider"></div>
+          <div class="status-segment">
+            <div><div class="status-label">Load Utilisation</div><div class="status-value" id="status-utilisation-value" style="color:var(--text-1)">26%</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RIGHT: LOAD CHART + CONTROLS ============ -->
+    <section class="panel panel-right">
+      <div class="panel-scroll">
+
+        <div class="panel-block">
+          <div class="panel-title-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+            <h2>Load Chart Lookup</h2>
+<!-- Demo data badge removed -->
+          </div>
+
+          <div class="lc-inputs">
+            <div class="lc-field">
+              <label>Boom Length</label>
+              <div class="lc-display"><span id="lc-boomlength-display">28.0 m</span></div>
+            </div>
+            <div class="lc-field">
+              <label for="working-radius-input">Working Radius</label>
+              <div class="lc-display">
+                <input type="number" id="working-radius-input" class="control-number" value="18.7" min="0" max="60" step="0.1">
+                <span class="unit">m</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rated-capacity-box">
+            <div class="rc-label-row">
+              <span class="rc-label">RATED CAPACITY</span>
+              <button class="info-btn" type="button" aria-label="About this value">i
+                <span class="tooltip">Computed live via bilinear interpolation over the load-chart grid below (see Interpolation Check). Chart values are placeholder/demo data, not certified Grove figures — insert verified manufacturer PDF values before any operational use.</span>
+              </button>
+            </div>
+            <div class="rc-value"><span id="lc-capacity-value">—</span><span class="unit">t</span></div>
+          </div>
+
+          <div class="interp-section">
+            <div class="interp-title">INTERPOLATION CHECK</div>
+            <table class="interp-table">
+              <thead><tr><th>Radius (m)</th><th>Boom (m)</th><th>Chart (t)</th><th>Interp. (t)</th><th>Diff (t)</th></tr></thead>
+              <tbody id="interp-table-body"></tbody>
+            </table>
+            <div class="tolerance-banner" id="tolerance-banner">
+              <span class="status-dot status-dot-green"></span><span id="tolerance-banner-text">All values within tolerance (±1.0 t)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <div class="panel-title-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2"/><path d="M6 8v13"/><path d="M6 3V2"/><circle cx="12" cy="14" r="2"/><path d="M12 16v5"/><path d="M12 3v9"/><circle cx="18" cy="9" r="2"/><path d="M18 11v10"/><path d="M18 3v4"/></svg>
+            <h2>Controls</h2>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row"><label for="boom-length-slider">Boom Length (m)</label><input type="number" id="boom-length-input" class="control-number" value="28.0" min="10" max="60" step="0.1"></div>
+            <input type="range" id="boom-length-slider" min="10" max="60" step="0.1" value="28" class="control-slider">
+            <div class="control-range-labels"><span>10 m</span><span>60 m</span></div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row"><label for="boom-angle-slider">Boom Angle (°)</label><input type="number" id="boom-angle-input" class="control-number" value="42.3" min="0" max="85" step="0.1"></div>
+            <input type="range" id="boom-angle-slider" min="0" max="85" step="0.1" value="42.3" class="control-slider">
+            <div class="control-range-labels"><span>0°</span><span>85°</span></div>
+          </div>
+
+          <div class="control-group">
+            <div class="control-label-row"><label for="load-slider">Load (t)</label><input type="number" id="load-input" class="control-number" value="12.5" min="0" max="50" step="0.1"></div>
+            <input type="range" id="load-slider" min="0" max="50" step="0.1" value="12.5" class="control-slider">
+            <div class="control-range-labels"><span>0 t</span><span>50 t</span></div>
+          </div>
+
+          <div class="control-group control-group-toggle">
+            <label id="outrigger-toggle-label">Outriggers · Deployed</label>
+            <div class="toggle-wrap">
+              <button class="toggle-switch active" id="outrigger-toggle" role="switch" aria-checked="true" aria-label="Toggle outriggers">
+                <span class="toggle-knob"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="footer-left">
+      <svg viewBox="0 0 32 32" fill="none">
+        <circle cx="6.5" cy="26" r="2" fill="currentColor"/>
+        <path d="M2 26.5h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M6.5 24V13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        <path d="M6.5 13L27 5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+      <span><b>Grove GMK5250L-1</b><span class="footer-sep">|</span>250 t All-Terrain Crane</span>
+    </div>
+    <div class="footer-right">REAL DATA <span class="sep">/</span> REAL CALCULATIONS <span class="sep">/</span> REAL SAFETY</div>
+  </footer>
+</div>
+
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Settings</h3><button id="settings-close-btn" aria-label="Close settings">×</button></div>
+    <div class="modal-body">
+      <div class="settings-row"><span>Units</span><span class="settings-value">Metric (t · m · bar)</span></div>
+      <div class="settings-row"><span>Crane Model</span><span class="settings-value">Grove GMK5250L-1</span></div>
+      <div class="settings-row"><span>Chart Data Mode</span><span class="settings-value">Demo / Placeholder</span></div>
+      <div class="settings-row"><span>Config</span><span class="settings-value">Full Outriggers, 360°</span></div>
+      <button class="reset-btn" id="settings-reset-btn" type="button">Reset to Default State</button>
+      <p class="settings-note">This is a college-project digital-twin simulator. The interpolation, trigonometry and point-in-polygon stability math are real; the load-chart figures are placeholders standing in for a verified manufacturer PDF.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ======================================================================
+   SECTION 1 — CONFIG, STATE, PLACEHOLDER LOAD-CHART DATA
+   ====================================================================== */
+
+const CONFIG = {
+  // Simplified radius model: radius = boomLength * cos(angle) + radiusOffsetM
+  // radiusOffsetM is a calibration constant (not a literal single measurement) —
+  // it folds the boom-pivot mount offset and rigging geometry into one modelled term.
+  radiusOffsetM: -2.0,
+  pivotHeightM: 3.15,          // height of the boom's luffing pivot above ground (m)
+  pivotZM: -2.0,               // 3D mount position of the pivot along local Z — kept equal
+                                // to radiusOffsetM so the visual boom reach always matches
+                                // the numeric "Working Radius" reading exactly.
+  loadHangHeightM: 2.15,       // fixed visual height of the load block's centre above ground
+
+  basePressureBar: 140,        // hydraulic baseline pressure with no load on the hook
+  pressureFactorBarPerT: 3.6,  // modelled bar-per-tonne slope
+  maxPressureBar: 320,
+
+  overloadRatio: 1.0,          // load / capacity above this => OVERLOAD
+  warningRatio: 0.90,          // load / capacity above this => WARNING
+
+  stabilityWarningMarginM: 1.4,   // inside the polygon but closer than this to an edge => WARNING
+  // Simplified combined-CG resisting weight for the tipping approximation (tonnes).
+  // This is a modelled constant, not the crane's literal mass — see effectiveTippingPoint().
+  craneResistingWeightT: 150,
+
+  outriggerDeployed:  { halfTrackX: 4.3, frontZ: 4.3, rearZ: -4.3 },
+  outriggerRetracted: { halfTrackX: 1.3, frontZ: 3.3, rearZ: -3.6 }
+};
+
+const state = {
+  boomLength: 28,          // m, 10–60
+  boomAngle: 42.3,          // deg, 0–85
+  load: 12.5,               // t, 0–50
+  outriggersDeployed: true,
+
+  // derived / computed each updateSimulation() pass:
+  workingRadius: 18.7,
+  ratedCapacity: null,      // t, null = outside chart envelope
+  utilisation: 0,           // 0–1 (or above 1 when overloaded)
+  hydraulicPressure: 0,
+  loadGroundPoint: { x: 0, z: 0 },
+  supportPolygon: [],
+  operationalVerdict: 'OK', // 'OK' | 'WARNING' | 'OVERLOAD' | 'OUT_OF_CHART'
+  stability: { verdict: 'SAFE', margin: 0 },
+
+  cameraMode: 'crane',      // 'crane' | 'top'
+  autoRotate: false
+};
+
+let parameterSource = 'angle';
+
+// ============================================================
+// LIVE DATA INPUT
+// Cycle 2 will call this function later.
+// For now this only creates the connection point.
+// ============================================================
+
+window.updateCraneFromLiveData = function (data) {
+
+  if (!data) return;
+
+  let geometryChanged = false;
+
+  if (Number.isFinite(Number(data.boomLengthM))) {
+    state.boomLength = Number(data.boomLengthM);
+    geometryChanged = true;
+  }
+
+  if (Number.isFinite(Number(data.boomAngleDeg))) {
+    state.boomAngle = Number(data.boomAngleDeg);
+    geometryChanged = true;
+  }
+
+  if (Number.isFinite(Number(data.loadT))) {
+    state.load = Number(data.loadT);
+  }
+
+  if (typeof data.outriggerDeployed === 'boolean') {
+    state.outriggersDeployed = data.outriggerDeployed;
+  }
+
+  if (geometryChanged) {
+    parameterSource = 'angle';
+    updateWorkingRadiusFromAngle();
+  }
+
+  // Recalculate the simulator using the new values.
+  updateSimulation();
+};
+
+/*
+ * PLACEHOLDER / SAMPLE LOAD CHART — NOT REAL MANUFACTURER DATA
+ * ---------------------------------------------------------------------
+ * These figures demonstrate the bilinear-interpolation engine with a
+ * self-consistent, monotonically-decreasing sample grid. They are NOT
+ * transcribed from, and must not be mistaken for, a certified Grove
+ * GMK5250L-1 load chart. Replace boomLengthsM / radiiM / capacityT
+ * below with values read directly from the manufacturer's certified
+ * PDF chart before this simulator is used for anything beyond a
+ * classroom digital-twin demo.
+ *
+ * `null` marks a cell outside this placeholder crane's reachable
+ * envelope at that boom length (radius unreachable within the 0–85°
+ * luffing range). ratedCapacity() refuses to interpolate whenever any
+ * of the four bracketing corners is null — it never estimates a value
+ * across a forbidden region.
+ */
+const CHART = {
+  model: "Grove GMK5250L-1",
+  source: "Real Data Jo Use Hua (GMK5250L-1, 80t Counterweight)",
+  config: "Full Outriggers, 360°",
+  isPlaceholder: false,
+  boomLengthsM: [13.3, 23.6, 38.0, 52.4, 70.0],
+  radiiM:       [5, 8, 10, 12, 15, 20, 30],
+  // capacityT[boomIndex][radiusIndex] — tonnes, or null if not permitted/unreachable
+  capacityT: [
+    [121.0, 84.5, 64.5, null, null, null, null],
+    [111.0, 83.5, 68.0, 57.0, 45.0, 27.0, null],
+    [59.0, 58.5, 53.0, 47.5, 40.0, 30.5, 17.2],
+    [null, null, 31.0, 31.0, 28.5, 23.5, 15.0],
+    [null, null, null, 14.5, 14.5, 14.5, 12.4]
+  ]
+};
+
+// Fixed sample points used by the static "Interpolation Check" validation table.
+// chartT is a hand-verified reference figure to sanity-check the live function
+// output against; interpolatedT is computed for real at init() via ratedCapacity().
+const INTERP_CHECK_POINTS = [
+  { boom: 23.6, radius: 10, chartT: 68.0 },
+  { boom: 38.0, radius: 15, chartT: 40.0 },
+  { boom: 52.4, radius: 20, chartT: 23.5 }
+];
+const INTERP_TOLERANCE_T = 1.0;
+
+/* ======================================================================
+   SECTION 2 — SMALL UTILITIES
+   ====================================================================== */
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function degToRad(d) { return d * Math.PI / 180; }
+function fmt(v, decimals) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  return v.toFixed(decimals);
+}
+
+/* ======================================================================
+   SECTION 3 — CORE CALCULATION FUNCTIONS
+   ====================================================================== */
+
+// radius = boomLength * cos(angle) + offset  (angle measured from horizontal)
+function radiusFromAngle(boomLengthM, angleDeg) {
+  const a = degToRad(angleDeg);
+  return boomLengthM * Math.cos(a) + CONFIG.radiusOffsetM;
+}
+
+let syncingControls = false;
+
+function radiusLimitsForBoom(boomLengthM) {
+  return {
+    min: Math.max(0, radiusFromAngle(boomLengthM, 85)),
+    max: Math.max(0, radiusFromAngle(boomLengthM, 0))
+  };
+}
+
+function updateWorkingRadiusFromAngle() {
+  state.workingRadius = Math.max(0, radiusFromAngle(state.boomLength, state.boomAngle));
+}
+
+function updateBoomAngleFromWorkingRadius() {
+  const limits = radiusLimitsForBoom(state.boomLength);
+  state.workingRadius = clamp(state.workingRadius, limits.min, limits.max);
+
+  const cosine = clamp(
+    (state.workingRadius - CONFIG.radiusOffsetM) / state.boomLength,
+    Math.cos(degToRad(85)),
+    1
+  );
+  state.boomAngle = clamp(Math.acos(cosine) * 180 / Math.PI, 0, 85);
+}
+
+// Generic bilinear interpolation over a rectangular cell.
+// (x0,y0)->q00  (x1,y0)->q10  (x0,y1)->q01  (x1,y1)->q11
+function bilinearInterpolation(x, y, x0, x1, y0, y1, q00, q01, q10, q11) {
+  const tx = (x1 === x0) ? 0 : (x - x0) / (x1 - x0);
+  const ty = (y1 === y0) ? 0 : (y - y0) / (y1 - y0);
+  const a = q00 + (q10 - q00) * tx;
+  const b = q01 + (q11 - q01) * tx;
+  return a + (b - a) * ty;
+}
+
+// Looks up rated capacity from the load chart via bilinear interpolation.
+// Returns null when the query is outside the chart's range, or when any
+// of the four bracketing corner cells is null (forbidden / unreachable).
+function ratedCapacity(chart, boomLengthM, radiusM) {
+  const bl = chart.boomLengthsM, rl = chart.radiiM;
+  if (boomLengthM == null || radiusM == null) return null;
+  if (boomLengthM < bl[0] || boomLengthM > bl[bl.length - 1]) return null;
+  if (radiusM < rl[0] || radiusM > rl[rl.length - 1]) return null;
+
+  let bi0 = 0;
+  for (let i = 0; i < bl.length - 1; i++) { if (boomLengthM >= bl[i] && boomLengthM <= bl[i + 1]) { bi0 = i; break; } }
+  const bi1 = Math.min(bi0 + 1, bl.length - 1);
+
+  let ri0 = 0;
+  for (let i = 0; i < rl.length - 1; i++) { if (radiusM >= rl[i] && radiusM <= rl[i + 1]) { ri0 = i; break; } }
+  const ri1 = Math.min(ri0 + 1, rl.length - 1);
+
+  const c00 = chart.capacityT[bi0][ri0];
+  const c10 = chart.capacityT[bi1][ri0];
+  const c01 = chart.capacityT[bi0][ri1];
+  const c11 = chart.capacityT[bi1][ri1];
+  if (c00 == null || c10 == null || c01 == null || c11 == null) return null; // forbidden region
+
+  return bilinearInterpolation(boomLengthM, radiusM, bl[bi0], bl[bi1], rl[ri0], rl[ri1], c00, c01, c10, c11);
+}
+
+// Standard ray-casting point-in-polygon test on the horizontal (x,z) plane.
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].x, zi = polygon[i].z;
+    const xj = polygon[j].x, zj = polygon[j].z;
+    const intersect = ((zi > point.z) !== (zj > point.z)) &&
+      (point.x < (xj - xi) * (point.z - zi) / (zj - zi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function distancePointToSegment(p, a, b) {
+  const abx = b.x - a.x, abz = b.z - a.z;
+  const apx = p.x - a.x, apz = p.z - a.z;
+  const abLen2 = abx * abx + abz * abz;
+  let t = abLen2 === 0 ? 0 : (apx * abx + apz * abz) / abLen2;
+  t = clamp(t, 0, 1);
+  const cx = a.x + abx * t, cz = a.z + abz * t;
+  return Math.hypot(p.x - cx, p.z - cz);
+}
+
+// Simplified combined center-of-gravity point used ONLY for the tipping test.
+// A suspended load on a boom crane is *meant* to sit far outside the small
+// outrigger footprint — that's the entire purpose of a boom. What actually
+// governs tip-over is the overturning moment the load exerts on the system,
+// resisted by the crane's own weight. This models that as a weighted pull
+// of the ground-projected CG toward the load, scaled by the load's share of
+// a modelled resisting weight (CONFIG.craneResistingWeightT). It is a
+// deliberate, commented simplification of real moment-balance stability
+// engineering — not a literal physical measurement.
+function effectiveTippingPoint(loadGroundPoint, loadT) {
+  const w = CONFIG.craneResistingWeightT;
+  const k = loadT <= 0 ? 0 : loadT / (loadT + w);
+  return { x: loadGroundPoint.x * k, z: loadGroundPoint.z * k };
+}
+
+// Physical stability verdict from the (weighted) load point vs. the support polygon.
+// Independent from — and must never be conflated with — the load-chart operational check.
+function stabilityVerdict(testPoint, polygon) {
+  if (!polygon || polygon.length < 3) return { verdict: 'SAFE', margin: 99 };
+  const inside = pointInPolygon(testPoint, polygon);
+  let minDist = Infinity;
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+    minDist = Math.min(minDist, distancePointToSegment(testPoint, a, b));
+  }
+  if (!inside) return { verdict: 'TIPPING', margin: -minDist };
+  if (minDist < CONFIG.stabilityWarningMarginM) return { verdict: 'WARNING', margin: minDist };
+  return { verdict: 'SAFE', margin: minDist };
+}
+
+// Operational verdict — governed ONLY by the load chart, never by the support polygon.
+function operationalVerdict(loadT, capacityT) {
+  if (capacityT == null) return 'OUT_OF_CHART';
+  if (loadT > capacityT * CONFIG.overloadRatio) return 'OVERLOAD';
+  if (loadT > capacityT * CONFIG.warningRatio) return 'WARNING';
+  return 'OK';
+}
+
+/* ======================================================================
+   SECTION 4 — DOM REFERENCES
+   ====================================================================== */
+const dom = {
+  viewport: document.getElementById('viewport-3d'),
+  resetCameraBtn: document.getElementById('reset-camera-btn'),
+  viewToggleBtns: Array.from(document.querySelectorAll('.view-toggle-btn')),
+  toolbarCraneBtn: document.getElementById('toolbar-crane-btn'),
+  toolbarCameraBtn: document.getElementById('toolbar-camera-btn'),
+  toolbarSettingsBtn: document.getElementById('toolbar-settings-btn'),
+  compassNeedle: document.getElementById('compass-needle'),
+
+  sensorLoadValue: document.getElementById('sensor-load-value'),
+  sensorLoadBar: document.getElementById('sensor-load-bar'),
+  sensorLoadCaption: document.getElementById('sensor-load-caption'),
+  sensorAngleValue: document.getElementById('sensor-angle-value'),
+  sensorAngleBar: document.getElementById('sensor-angle-bar'),
+  sensorBoomLengthValue: document.getElementById('sensor-boomlength-value'),
+  sensorBoomLengthBar: document.getElementById('sensor-boomlength-bar'),
+  sensorRadiusValue: document.getElementById('sensor-radius-value'),
+  sensorRadiusBar: document.getElementById('sensor-radius-bar'),
+  sensorOutriggerStatus: document.getElementById('sensor-outrigger-status'),
+  sensorOutriggerCheck: document.getElementById('sensor-outrigger-check'),
+  sensorOutriggerCaption: document.getElementById('sensor-outrigger-caption'),
+  sensorPressureValue: document.getElementById('sensor-pressure-value'),
+  sensorPressureBar: document.getElementById('sensor-pressure-bar'),
+  cardLoad: document.getElementById('card-load'),
+
+  statusOperationalValue: document.getElementById('status-operational-value'),
+  statusStabilityDot: document.getElementById('status-stability-dot'),
+  statusStabilityValue: document.getElementById('status-stability-value'),
+  statusUtilisationValue: document.getElementById('status-utilisation-value'),
+
+  lcBoomLengthDisplay: document.getElementById('lc-boomlength-display'),
+  lcRadiusDisplay: document.getElementById('working-radius-input'),
+  workingRadiusInput: document.getElementById('working-radius-input'),
+  lcRadiusInput: document.getElementById('working-radius-input'),
+  lcCapacityValue: document.getElementById('lc-capacity-value'),
+  interpTableBody: document.getElementById('interp-table-body'),
+  toleranceBanner: document.getElementById('tolerance-banner'),
+  toleranceBannerText: document.getElementById('tolerance-banner-text'),
+
+  boomLengthSlider: document.getElementById('boom-length-slider'),
+  boomLengthInput: document.getElementById('boom-length-input'),
+  boomAngleSlider: document.getElementById('boom-angle-slider'),
+  boomAngleInput: document.getElementById('boom-angle-input'),
+  loadSlider: document.getElementById('load-slider'),
+  loadInput: document.getElementById('load-input'),
+  outriggerToggle: document.getElementById('outrigger-toggle'),
+  outriggerToggleLabel: document.getElementById('outrigger-toggle-label'),
+
+  navTabs: Array.from(document.querySelectorAll('.nav-tab')),
+  settingsModal: document.getElementById('settings-modal'),
+  settingsCloseBtn: document.getElementById('settings-close-btn'),
+  settingsResetBtn: document.getElementById('settings-reset-btn')
+};
+
+/* ======================================================================
+   SECTION 5 — THREE.JS SCENE, CAMERA, LIGHTING, GROUND
+   ====================================================================== */
+const three = {};
+const MAT = {};
+
+function buildMaterials() {
+  MAT.yellow        = new THREE.MeshStandardMaterial({ color: 0xf5c116, roughness: 0.45, metalness: 0.35 });
+  MAT.yellowDark     = new THREE.MeshStandardMaterial({ color: 0xcf9f0e, roughness: 0.5,  metalness: 0.3  });
+  MAT.darkMetal      = new THREE.MeshStandardMaterial({ color: 0x2b2e33, roughness: 0.5,  metalness: 0.55 });
+  MAT.chassisGray    = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.6,  metalness: 0.4  });
+  MAT.tire           = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.92, metalness: 0.05 });
+  MAT.rim            = new THREE.MeshStandardMaterial({ color: 0xcfcfcf, roughness: 0.4,  metalness: 0.7  });
+  MAT.glass          = new THREE.MeshStandardMaterial({ color: 0x27394a, roughness: 0.2,  metalness: 0.5  });
+  MAT.counterweight  = new THREE.MeshStandardMaterial({ color: 0x1c1e22, roughness: 0.6,  metalness: 0.35 });
+  MAT.hook           = new THREE.MeshStandardMaterial({ color: 0xb33228, roughness: 0.4,  metalness: 0.6  });
+  MAT.pad            = new THREE.MeshStandardMaterial({ color: 0xe2e2e2, roughness: 0.7,  metalness: 0.1  });
+  MAT.load           = new THREE.MeshStandardMaterial({ color: 0x30353b, roughness: 0.7,  metalness: 0.25 });
+}
+
+function initScene() {
+  three.scene = new THREE.Scene();
+
+  const w = dom.viewport.clientWidth || 800;
+  const h = dom.viewport.clientHeight || 600;
+
+  three.camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 500);
+  three.defaultCamPos = new THREE.Vector3(31, 19, 35);
+  three.defaultCamTarget = new THREE.Vector3(0, 5, 2.5);
+  three.topCamPos = new THREE.Vector3(0.01, 64, 0.01);
+  three.topCamTarget = new THREE.Vector3(0, 0, 0);
+  three.camera.position.copy(three.defaultCamPos);
+
+  three.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  three.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  three.renderer.setSize(w, h);
+  three.renderer.setClearColor(0x000000, 0);
+  three.renderer.shadowMap.enabled = true;
+  three.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  if ('outputEncoding' in three.renderer) three.renderer.outputEncoding = THREE.sRGBEncoding;
+  dom.viewport.insertBefore(three.renderer.domElement, dom.viewport.firstChild);
+
+  three.controls = new THREE.OrbitControls(three.camera, three.renderer.domElement);
+  three.controls.target.copy(three.defaultCamTarget);
+  three.controls.enableDamping = true;
+  three.controls.dampingFactor = 0.08;
+  three.controls.minDistance = 9;
+  three.controls.maxDistance = 95;
+  three.controls.maxPolarAngle = Math.PI * 0.495;
+  three.controls.update();
+
+  buildMaterials();
+  buildLighting();
+  buildGround();
+  buildCrane();
+  buildGroundOverlays();
+}
+
+function buildLighting() {
+  const hemi = new THREE.HemisphereLight(0xbcd7ee, 0x3a3f34, 0.75);
+  three.scene.add(hemi);
+
+  const sun = new THREE.DirectionalLight(0xfff3e0, 1.2);
+  sun.position.set(26, 38, 18);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -34; sun.shadow.camera.right = 34;
+  sun.shadow.camera.top = 34; sun.shadow.camera.bottom = -34;
+  sun.shadow.camera.near = 1; sun.shadow.camera.far = 100;
+  sun.shadow.bias = -0.0015;
+  three.scene.add(sun);
+
+  const fillLight = new THREE.DirectionalLight(0xcfe0f0, 0.25);
+  fillLight.position.set(-20, 14, -16);
+  three.scene.add(fillLight);
+}
+
+function buildGround() {
+  const ground = new THREE.Mesh(
+    new THREE.CircleGeometry(60, 64),
+    new THREE.MeshStandardMaterial({ color: 0x494e46, roughness: 0.95, metalness: 0.02 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  three.scene.add(ground);
+
+  const pad = new THREE.Mesh(
+    new THREE.CircleGeometry(13, 48),
+    new THREE.MeshStandardMaterial({ color: 0x5c6058, roughness: 0.9, metalness: 0.03 })
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = 0.01;
+  pad.receiveShadow = true;
+  three.scene.add(pad);
+
+  const grid = new THREE.GridHelper(60, 30, 0x2c2f2a, 0x2c2f2a);
+  grid.position.y = 0.02;
+  grid.material.opacity = 0.18;
+  grid.material.transparent = true;
+  three.scene.add(grid);
+}
+
+/* ======================================================================
+   SECTION 6 — CRANE CONSTRUCTION
+   ====================================================================== */
+function buildCrane() {
+  three.craneGroup = new THREE.Group();
+  three.scene.add(three.craneGroup);
+
+  buildChassisAndWheels();
+  buildCabAndTurntable();
+  buildBoomAndHook();
+  buildOutriggers();
+}
+
+function buildChassisAndWheels() {
+  const chassisBottomY = 1.02;
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.5, 10.4), MAT.chassisGray);
+  chassis.position.set(0, chassisBottomY + 0.75, 0.4);
+  chassis.castShadow = true; chassis.receiveShadow = true;
+  three.craneGroup.add(chassis);
+
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.12, 10.0), MAT.yellowDark);
+  deck.position.set(0, chassisBottomY + 1.5 + 0.06, 0.4);
+  deck.castShadow = true;
+  three.craneGroup.add(deck);
+  three.deckTopY = chassisBottomY + 1.5 + 0.12;
+
+  const wheelZs = [-4.1, -2.05, 0.0, 2.6, 4.6];
+  const wheelR = 0.56, wheelW = 0.42;
+  wheelZs.forEach((z) => {
+    [-1, 1].forEach((side) => {
+      const wg = new THREE.CylinderGeometry(wheelR, wheelR, wheelW, 20);
+      wg.rotateZ(Math.PI / 2);
+      const wheel = new THREE.Mesh(wg, MAT.tire);
+      wheel.position.set(side * (1.5 + wheelW / 2), wheelR, z);
+      wheel.castShadow = true;
+      three.craneGroup.add(wheel);
+
+      const rg = new THREE.CylinderGeometry(wheelR * 0.4, wheelR * 0.4, wheelW + 0.03, 12);
+      rg.rotateZ(Math.PI / 2);
+      const rim = new THREE.Mesh(rg, MAT.rim);
+      rim.position.copy(wheel.position);
+      three.craneGroup.add(rim);
+    });
+  });
+
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.7, 2.3), MAT.yellow);
+  cab.position.set(0, chassisBottomY + 1.5 + 0.85, 4.55);
+  cab.castShadow = true;
+  three.craneGroup.add(cab);
+
+  const windshield = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.85, 0.08), MAT.glass);
+  windshield.position.set(0, chassisBottomY + 1.5 + 1.05, 4.55 + 1.1);
+  windshield.rotation.x = -0.18;
+  three.craneGroup.add(windshield);
+
+  const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.3, 0.3), MAT.darkMetal);
+  bumper.position.set(0, chassisBottomY + 0.35, 5.75);
+  three.craneGroup.add(bumper);
+}
+
+function buildCabAndTurntable() {
+  const tY = three.deckTopY;
+  const turntable = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.8, 0.5, 24), MAT.darkMetal);
+  turntable.position.set(0, tY + 0.25, CONFIG.pivotZM);
+  turntable.castShadow = true;
+  three.craneGroup.add(turntable);
+  three.pivotBaseY = tY + 0.5;
+
+  const opCab = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 2.0), MAT.yellow);
+  opCab.position.set(-1.2, three.pivotBaseY + 0.75, CONFIG.pivotZM + 1.7);
+  opCab.castShadow = true;
+  three.craneGroup.add(opCab);
+
+  const opWind = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.65, 0.07), MAT.glass);
+  opWind.position.set(-1.2, three.pivotBaseY + 0.98, CONFIG.pivotZM + 1.7 + 1.03);
+  opWind.rotation.x = -0.22;
+  three.craneGroup.add(opWind);
+
+  const cw = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.5, 1.5), MAT.counterweight);
+  cw.position.set(0, three.pivotBaseY + 0.75, CONFIG.pivotZM - 2.6);
+  cw.castShadow = true;
+  three.craneGroup.add(cw);
+
+  const cw2 = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 1.3), MAT.counterweight);
+  cw2.position.set(0, three.pivotBaseY + 1.5 + 0.25, CONFIG.pivotZM - 2.6);
+  cw2.castShadow = true;
+  three.craneGroup.add(cw2);
+}
+
+function buildBoomAndHook() {
+  three.boomPivot = new THREE.Group();
+  three.boomPivot.position.set(0, three.pivotBaseY + 0.55, CONFIG.pivotZM);
+  three.craneGroup.add(three.boomPivot);
+
+  const housingGeo = new THREE.CylinderGeometry(0.42, 0.42, 1.3, 14);
+  housingGeo.rotateZ(Math.PI / 2);
+  const housing = new THREE.Mesh(housingGeo, MAT.darkMetal);
+  three.boomPivot.add(housing);
+
+  three.boomWidth = 0.85; three.boomHeight = 0.85;
+  three.boomMesh = new THREE.Mesh(new THREE.BoxGeometry(three.boomWidth, three.boomHeight, 1), MAT.yellow);
+  three.boomMesh.castShadow = true;
+  three.boomPivot.add(three.boomMesh);
+
+  three.boomSeams = [];
+  for (let i = 0; i < 3; i++) {
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(three.boomWidth + 0.03, 0.05, 0.05), MAT.yellowDark);
+    three.boomPivot.add(seam);
+    three.boomSeams.push(seam);
+  }
+
+  three.boomHeadAnchor = new THREE.Group();
+  three.boomPivot.add(three.boomHeadAnchor);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(three.boomWidth + 0.12, three.boomHeight + 0.1, 0.55), MAT.darkMetal);
+  three.boomHeadAnchor.add(head);
+  const sheaveGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.1, 16);
+  sheaveGeo.rotateX(Math.PI / 2);
+  const sheave = new THREE.Mesh(sheaveGeo, MAT.darkMetal);
+  sheave.position.set(0, -0.22, 0.18);
+  three.boomHeadAnchor.add(sheave);
+
+  three.hoistCable = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+    new THREE.LineBasicMaterial({ color: 0x161616 })
+  );
+  three.scene.add(three.hoistCable);
+
+  three.hookGroup = new THREE.Group();
+  const hb = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.4), MAT.darkMetal);
+  hb.castShadow = true;
+  three.hookGroup.add(hb);
+  const hookMesh = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.055, 8, 16, Math.PI * 1.3), MAT.hook);
+  hookMesh.position.set(0, -0.42, 0);
+  hookMesh.rotation.z = Math.PI;
+  three.hookGroup.add(hookMesh);
+  three.scene.add(three.hookGroup);
+
+  three.loadMesh = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.2, 1.2), MAT.load);
+  three.loadMesh.castShadow = true;
+  three.scene.add(three.loadMesh);
+
+  three.riggingLines = new THREE.Group();
+  const riggingMat = new THREE.LineBasicMaterial({ color: 0x161616 });
+  for (let i = 0; i < 4; i++) {
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), riggingMat);
+    three.riggingLines.add(line);
+  }
+  three.scene.add(three.riggingLines);
+}
+
+function buildOutriggers() {
+  three.outriggers = [];
+  const dep = CONFIG.outriggerDeployed;
+  const corners = [
+    { sx: -1, sz: 1,  mountX: -1.5, mountZ: 3.4,  mountY: 1.02 + 0.5 },
+    { sx: 1,  sz: 1,  mountX: 1.5,  mountZ: 3.4,  mountY: 1.02 + 0.5 },
+    { sx: -1, sz: -1, mountX: -1.5, mountZ: -3.4, mountY: 1.02 + 0.5 },
+    { sx: 1,  sz: -1, mountX: 1.5,  mountZ: -3.4, mountY: 1.02 + 0.5 }
+  ];
+  corners.forEach((c) => {
+    const group = new THREE.Group();
+    group.position.set(c.mountX, c.mountY, c.mountZ);
+    three.craneGroup.add(group);
+
+    const depX = c.sx * dep.halfTrackX;
+    const depZ = c.sz > 0 ? dep.frontZ : dep.rearZ;
+    const dirX = depX - c.mountX, dirZ = depZ - c.mountZ;
+    const fullLen = Math.hypot(dirX, dirZ);
+    const angle = Math.atan2(dirZ, dirX);
+    group.rotation.y = -angle;
+
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(1, 0.24, 0.24), MAT.darkMetal);
+    beam.castShadow = true;
+    group.add(beam);
+
+    const jack = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 1, 10), MAT.darkMetal);
+    jack.castShadow = true;
+    group.add(jack);
+
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.12, 0.85), MAT.pad);
+    pad.castShadow = true; pad.receiveShadow = true;
+    group.add(pad);
+
+    three.outriggers.push({ group, beam, jack, pad, fullLen, mountY: c.mountY });
+  });
+  three.outriggerAnimValue = 1;
+  three.outriggerAnimTarget = 1;
+}
+
+function buildGroundOverlays() {
+  three.overlayGroup = new THREE.Group();
+  three.scene.add(three.overlayGroup);
+
+  const circlePts = [];
+  for (let i = 0; i <= 64; i++) {
+    const t = (i / 64) * Math.PI * 2;
+    circlePts.push(new THREE.Vector3(Math.sin(t), 0, Math.cos(t)));
+  }
+  three.radiusCircle = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(circlePts),
+    new THREE.LineBasicMaterial({ color: 0xffc22e, transparent: true, opacity: 0.8 })
+  );
+  three.radiusCircle.position.y = 0.03;
+  three.overlayGroup.add(three.radiusCircle);
+
+  three.radialLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.035, 0), new THREE.Vector3(0, 0.035, 1)]),
+    new THREE.LineDashedMaterial({ color: 0xffc22e, dashSize: 0.45, gapSize: 0.3, transparent: true, opacity: 0.85 })
+  );
+  three.overlayGroup.add(three.radialLine);
+
+  const polyPts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  three.supportPolygonLine = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(polyPts),
+    new THREE.LineDashedMaterial({ color: 0xffc22e, dashSize: 0.4, gapSize: 0.28 })
+  );
+  three.supportPolygonLine.position.y = 0.04;
+  three.overlayGroup.add(three.supportPolygonLine);
+
+  three.loadMarker = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.85 }));
+  three.loadMarker.rotation.x = -Math.PI / 2;
+  three.loadMarker.position.y = 0.05;
+  three.overlayGroup.add(three.loadMarker);
+
+  three.loadMarkerRing = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.56, 24), new THREE.MeshBasicMaterial({ color: 0x22c55e }));
+  three.loadMarkerRing.rotation.x = -Math.PI / 2;
+  three.loadMarkerRing.position.y = 0.052;
+  three.overlayGroup.add(three.loadMarkerRing);
+
+  three.dropLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+    new THREE.LineDashedMaterial({ color: 0x22c55e, dashSize: 0.3, gapSize: 0.22, transparent: true, opacity: 0.75 })
+  );
+  three.overlayGroup.add(three.dropLine);
+}
+
+/* ======================================================================
+   SECTION 7 — LIVE UPDATE FUNCTIONS (called every time a control changes)
+   ====================================================================== */
+
+function computeSupportPolygonPoints(deployed) {
+  const cfg = deployed ? CONFIG.outriggerDeployed : CONFIG.outriggerRetracted;
+  return [
+    { x: -cfg.halfTrackX, z: cfg.frontZ },
+    { x:  cfg.halfTrackX, z: cfg.frontZ },
+    { x:  cfg.halfTrackX, z: cfg.rearZ  },
+    { x: -cfg.halfTrackX, z: cfg.rearZ  }
+  ];
+}
+
+function updateWorkingRadius() {
+  const r = state.workingRadius;
+
+  dom.sensorRadiusValue.textContent = fmt(r, 1);
+  if (parameterSource !== 'radius' || document.activeElement !== dom.workingRadiusInput) {
+    dom.workingRadiusInput.value = fmt(r, 1);
+  }
+  dom.lcBoomLengthDisplay.textContent = fmt(state.boomLength, 1) + ' m';
+
+  const maxR = CHART.radiiM[CHART.radiiM.length - 1];
+  dom.sensorRadiusBar.style.width = (clamp(r / maxR, 0, 1) * 100) + '%';
+
+  if (three.radiusCircle) three.radiusCircle.scale.set(r, 1, r);
+  if (three.radialLine) {
+    const pos = three.radialLine.geometry.attributes.position;
+    pos.setXYZ(0, 0, 0.035, 0);
+    pos.setXYZ(1, 0, 0.035, r);
+    pos.needsUpdate = true;
+    three.radialLine.computeLineDistances();
+  }
+}
+
+function updateSupportPolygon() {
+  state.supportPolygon = computeSupportPolygonPoints(state.outriggersDeployed);
+  if (three.supportPolygonLine) {
+    const pos = three.supportPolygonLine.geometry.attributes.position;
+    state.supportPolygon.forEach((p, i) => pos.setXYZ(i, p.x, 0, p.z));
+    pos.needsUpdate = true;
+    three.supportPolygonLine.computeLineDistances();
+  }
+}
+
+function updateLoadPosition() {
+  const r = state.workingRadius;
+  state.loadGroundPoint = { x: 0, z: r };
+
+  if (three.loadMarker) three.loadMarker.position.set(0, 0.05, r);
+  if (three.loadMarkerRing) three.loadMarkerRing.position.set(0, 0.052, r);
+
+  if (three.dropLine) {
+    const loadBottomY = Math.max(CONFIG.loadHangHeightM - 0.6, 0.08);
+    const pos = three.dropLine.geometry.attributes.position;
+    pos.setXYZ(0, 0, loadBottomY, r);
+    pos.setXYZ(1, 0, 0.06, r);
+    pos.needsUpdate = true;
+    three.dropLine.computeLineDistances();
+  }
+}
+
+function updateCraneGeometry() {
+  const angleRad = degToRad(state.boomAngle);
+  three.boomPivot.rotation.x = -angleRad;
+
+  three.boomMesh.geometry.dispose();
+  three.boomMesh.geometry = new THREE.BoxGeometry(three.boomWidth, three.boomHeight, state.boomLength);
+  three.boomMesh.position.z = state.boomLength / 2;
+
+  three.boomSeams.forEach((seam, i) => {
+    const t = (i + 1) / (three.boomSeams.length + 1);
+    seam.position.z = state.boomLength * t;
+  });
+  three.boomHeadAnchor.position.z = state.boomLength;
+
+  three.boomPivot.updateMatrixWorld(true);
+  const tipWorld = three.boomPivot.localToWorld(new THREE.Vector3(0, 0, state.boomLength));
+
+  three.hookGroup.position.set(tipWorld.x, CONFIG.loadHangHeightM + 0.55, tipWorld.z);
+  three.loadMesh.position.set(tipWorld.x, CONFIG.loadHangHeightM, tipWorld.z);
+
+  const hoistPos = three.hoistCable.geometry.attributes.position;
+  hoistPos.setXYZ(0, tipWorld.x, tipWorld.y, tipWorld.z);
+  hoistPos.setXYZ(1, tipWorld.x, CONFIG.loadHangHeightM + 0.8, tipWorld.z);
+  hoistPos.needsUpdate = true;
+
+  const hw = 0.85, hd = 0.6, hh = 0.6;
+  const corners = [[-hw, hd], [hw, hd], [hw, -hd], [-hw, -hd]];
+  three.riggingLines.children.forEach((line, i) => {
+    const c = corners[i];
+    const pos = line.geometry.attributes.position;
+    pos.setXYZ(0, tipWorld.x, CONFIG.loadHangHeightM + 0.42, tipWorld.z);
+    pos.setXYZ(1, tipWorld.x + c[0], CONFIG.loadHangHeightM + hh, tipWorld.z + c[1]);
+    pos.needsUpdate = true;
+  });
+
+  three.outriggerAnimTarget = state.outriggersDeployed ? 1 : 0;
+}
+
+function applyOutriggerAnimVisual() {
+  const anim = three.outriggerAnimValue;
+  const minLen = 0.35;
+  three.outriggers.forEach((o) => {
+    const curLen = lerp(minLen, o.fullLen, anim);
+    o.beam.scale.set(curLen, 1, 1);
+    o.beam.position.set(curLen / 2, 0, 0);
+    o.beam.visible = anim > 0.02;
+
+    const jackFullLen = Math.max(o.mountY - 0.05, 0.2);
+    const jackLen = Math.max(lerp(0.12, jackFullLen, anim), 0.05);
+    o.jack.scale.set(1, jackLen, 1);
+    o.jack.position.set(curLen, -jackLen / 2, 0);
+
+    o.pad.position.set(curLen, -jackLen - 0.03, 0);
+    o.pad.visible = anim > 0.08;
+  });
+}
+
+function updateHydraulicPressure() {
+  const p = clamp(CONFIG.basePressureBar + state.load * CONFIG.pressureFactorBarPerT, 0, CONFIG.maxPressureBar);
+  state.hydraulicPressure = p;
+  dom.sensorPressureValue.textContent = fmt(p, 0);
+  const pct = clamp(p / CONFIG.maxPressureBar, 0, 1) * 100;
+  dom.sensorPressureBar.style.width = pct + '%';
+  dom.sensorPressureBar.style.background = pct > 88 ? 'var(--red)' : (pct > 70 ? 'var(--orange)' : 'var(--green)');
+}
+
+function updateLoadChart() {
+  state.ratedCapacity = ratedCapacity(CHART, state.boomLength, state.workingRadius);
+  state.utilisation = state.ratedCapacity ? state.load / state.ratedCapacity : null;
+
+  dom.lcCapacityValue.textContent = state.ratedCapacity == null ? '—' : fmt(state.ratedCapacity, 1);
+  dom.sensorLoadCaption.textContent = state.ratedCapacity == null
+    ? 'Max (at this config): outside chart range'
+    : 'Max (at this config): ' + fmt(state.ratedCapacity, 1) + ' t';
+}
+
+function updateSensors() {
+  dom.sensorLoadValue.textContent = fmt(state.load, 1);
+  dom.sensorAngleValue.textContent = fmt(state.boomAngle, 1);
+  dom.sensorBoomLengthValue.textContent = fmt(state.boomLength, 1);
+
+  dom.sensorAngleBar.style.width = (clamp(state.boomAngle / 85, 0, 1) * 100) + '%';
+  dom.sensorBoomLengthBar.style.width = (clamp((state.boomLength - 10) / 50, 0, 1) * 100) + '%';
+
+  const util = state.utilisation;
+  const loadPct = util == null ? 100 : clamp(util, 0, 1.2) * 100;
+  dom.sensorLoadBar.style.width = Math.min(loadPct, 100) + '%';
+  let loadColor = 'var(--green)';
+  if (util == null || util > CONFIG.overloadRatio) loadColor = 'var(--red)';
+  else if (util > CONFIG.warningRatio) loadColor = 'var(--orange)';
+  dom.sensorLoadBar.style.background = loadColor;
+
+  dom.sensorOutriggerStatus.textContent = state.outriggersDeployed ? 'Deployed' : 'Retracted';
+  dom.sensorOutriggerCaption.textContent = state.outriggersDeployed ? 'All 4 outriggers extended' : 'Outriggers stowed — reduced support base';
+  dom.sensorOutriggerCheck.style.color = state.outriggersDeployed ? 'var(--green)' : 'var(--orange)';
+}
+
+function updateSystemStatus() {
+  state.operationalVerdict = operationalVerdict(state.load, state.ratedCapacity);
+  const testPoint = effectiveTippingPoint(state.loadGroundPoint, state.load);
+  state.stability = stabilityVerdict(testPoint, state.supportPolygon);
+
+  const opMap = {
+    OK:           { text: 'OPERATIONAL', color: 'var(--green)' },
+    WARNING:      { text: 'WARNING',     color: 'var(--orange)' },
+    OVERLOAD:     { text: 'OVERLOAD',    color: 'var(--red)' },
+    OUT_OF_CHART: { text: 'OUT OF CHART', color: 'var(--red)' }
+  };
+  const op = opMap[state.operationalVerdict];
+  dom.statusOperationalValue.textContent = op.text;
+  dom.statusOperationalValue.style.color = op.color;
+  const okIcon = document.querySelector('.status-icon-ok');
+  if (okIcon) okIcon.style.color = op.color;
+
+  const stabMap = {
+    SAFE:    { text: 'SAFE',    color: 'var(--green)' },
+    WARNING: { text: 'WARNING', color: 'var(--orange)' },
+    TIPPING: { text: 'TIPPING', color: 'var(--red)' }
+  };
+  const st = stabMap[state.stability.verdict];
+  dom.statusStabilityValue.textContent = st.text;
+  dom.statusStabilityValue.style.color = st.color;
+  dom.statusStabilityDot.style.background = st.color;
+  dom.statusStabilityDot.style.boxShadow = '0 0 6px ' + st.color;
+
+  const utilPct = state.utilisation == null ? null : Math.round(state.utilisation * 100);
+  dom.statusUtilisationValue.textContent = utilPct == null ? '—' : utilPct + '%';
+
+  if (dom.cardLoad) {
+    dom.cardLoad.style.borderColor =
+      (state.operationalVerdict === 'OVERLOAD' || state.operationalVerdict === 'OUT_OF_CHART') ? 'rgba(239,68,68,0.55)' :
+      (state.operationalVerdict === 'WARNING' ? 'rgba(245,158,11,0.5)' : 'var(--border)');
+  }
+}
+
+function updateSimulation() {
+  if (parameterSource === 'radius') {
+    updateBoomAngleFromWorkingRadius();
+  } else {
+    updateWorkingRadiusFromAngle();
+  }
+  dom.boomAngleInput.value = fmt(state.boomAngle, 1);
+  dom.boomAngleSlider.value = String(state.boomAngle);
+  refreshSliderFill(dom.boomAngleSlider);
+  updateWorkingRadius();
+  updateSupportPolygon();
+  updateLoadPosition();
+  updateCraneGeometry();
+  updateHydraulicPressure();
+  updateLoadChart();
+  updateSensors();
+  updateSystemStatus();
+}
+
+function populateInterpolationCheckTable() {
+  let allOk = true;
+  const rows = INTERP_CHECK_POINTS.map((p) => {
+    const interpolated = ratedCapacity(CHART, p.boom, p.radius);
+    const diff = interpolated == null ? null : Math.abs(interpolated - p.chartT);
+    if (diff == null || diff > INTERP_TOLERANCE_T) allOk = false;
+    return { boom: p.boom, radius: p.radius, chartT: p.chartT, interpolated: interpolated, diff: diff };
+  });
+
+  dom.interpTableBody.innerHTML = rows.map(function (r) {
+    const diffClass = (r.diff != null && r.diff <= INTERP_TOLERANCE_T) ? 'diff-ok' : '';
+    return '<tr><td>' + fmt(r.radius, 0) + '</td><td>' + fmt(r.boom, 0) + '</td><td>' +
+      fmt(r.chartT, 1) + '</td><td>' + fmt(r.interpolated, 1) + '</td><td class="' + diffClass + '">' +
+      fmt(r.diff, 1) + '</td></tr>';
+  }).join('');
+
+  const dot = dom.toleranceBanner.querySelector('.status-dot');
+  if (allOk) {
+    dom.toleranceBanner.style.background = 'var(--green-dim)';
+    dom.toleranceBanner.style.borderColor = 'rgba(34,197,94,0.35)';
+    dom.toleranceBanner.style.color = '#7fe0a3';
+    dom.toleranceBannerText.textContent = 'All values within tolerance (±' + INTERP_TOLERANCE_T.toFixed(1) + ' t)';
+    if (dot) dot.style.background = 'var(--green)';
+  } else {
+    dom.toleranceBanner.style.background = 'var(--red-dim)';
+    dom.toleranceBanner.style.borderColor = 'rgba(239,68,68,0.35)';
+    dom.toleranceBanner.style.color = '#f3a3a3';
+    dom.toleranceBannerText.textContent = 'One or more values exceed tolerance (±' + INTERP_TOLERANCE_T.toFixed(1) + ' t)';
+    if (dot) dot.style.background = 'var(--red)';
+  }
+}
+
+/* ======================================================================
+   SECTION 8 — CONTROL BINDING (sliders, toggle, camera, nav, settings)
+   ====================================================================== */
+
+function refreshSliderFill(slider) {
+  const min = parseFloat(slider.min), max = parseFloat(slider.max);
+  const value = parseFloat(slider.value);
+  const pct = ((value - min) / (max - min)) * 100;
+  slider.style.background = 'linear-gradient(to right, var(--yellow) 0%, var(--yellow) ' + pct + '%, #262b31 ' + pct + '%, #262b31 100%)';
+}
+
+function bindNumericControl(slider, input, key, decimals) {
+  function setFromSlider() {
+    const v = parseFloat(slider.value);
+    state[key] = v;
+    input.value = v.toFixed(decimals);
+    refreshSliderFill(slider);
+    updateSimulation();
+  }
+  function setFromInput() {
+    let v = parseFloat(input.value);
+    if (Number.isNaN(v)) v = state[key];
+    v = clamp(v, parseFloat(slider.min), parseFloat(slider.max));
+    state[key] = v;
+    slider.value = String(v);
+    input.value = v.toFixed(decimals);
+    refreshSliderFill(slider);
+    updateSimulation();
+  }
+  slider.addEventListener('input', setFromSlider);
+  input.addEventListener('change', setFromInput);
+  refreshSliderFill(slider);
+}
+
+function bindBoomLengthControl() {
+  function update(value) {
+    if (Number.isNaN(value)) value = parseFloat(dom.boomLengthInput.value);
+    if (Number.isNaN(value)) value = state.boomLength;
+
+    state.boomLength = clamp(value, 10, 60);
+    dom.boomLengthInput.value = state.boomLength.toFixed(1);
+    dom.boomLengthSlider.value = String(state.boomLength);
+    refreshSliderFill(dom.boomLengthSlider);
+
+    if (!syncingControls) {
+      syncingControls = true;
+      if (parameterSource === 'angle') {
+        updateWorkingRadiusFromAngle();
+      } else {
+        updateBoomAngleFromWorkingRadius();
+      }
+      syncingControls = false;
+    }
+    updateSimulation();
+  }
+
+  dom.boomLengthSlider.addEventListener('input', function () {
+    update(parseFloat(dom.boomLengthSlider.value));
+  });
+  dom.boomLengthInput.addEventListener('change', function () {
+    update(parseFloat(dom.boomLengthInput.value));
+  });
+  refreshSliderFill(dom.boomLengthSlider);
+}
+
+function bindBoomAngleControl() {
+  function update(value) {
+    if (Number.isNaN(value)) value = parseFloat(dom.boomAngleInput.value);
+    if (Number.isNaN(value)) value = state.boomAngle;
+
+    state.boomAngle = clamp(value, 0, 85);
+    dom.boomAngleInput.value = state.boomAngle.toFixed(1);
+    dom.boomAngleSlider.value = String(state.boomAngle);
+    refreshSliderFill(dom.boomAngleSlider);
+
+    if (!syncingControls) {
+      syncingControls = true;
+      parameterSource = 'angle';
+      updateWorkingRadiusFromAngle();
+      syncingControls = false;
+    }
+    updateSimulation();
+  }
+
+  dom.boomAngleSlider.addEventListener('input', function () {
+    update(parseFloat(dom.boomAngleSlider.value));
+  });
+  dom.boomAngleInput.addEventListener('change', function () {
+    update(parseFloat(dom.boomAngleInput.value));
+  });
+  refreshSliderFill(dom.boomAngleSlider);
+}
+
+function bindWorkingRadiusControl() {
+  function update() {
+    const value = parseFloat(dom.workingRadiusInput.value);
+    if (Number.isNaN(value)) return;
+
+    state.workingRadius = value;
+    if (!syncingControls) {
+      syncingControls = true;
+      parameterSource = 'radius';
+      updateBoomAngleFromWorkingRadius();
+      dom.boomAngleInput.value = state.boomAngle.toFixed(1);
+      dom.boomAngleSlider.value = String(state.boomAngle);
+      refreshSliderFill(dom.boomAngleSlider);
+      syncingControls = false;
+    }
+    updateSimulation();
+  }
+
+  dom.workingRadiusInput.addEventListener('input', update);
+  dom.workingRadiusInput.addEventListener('change', update);
+}
+
+dom.outriggerToggle.addEventListener('click', function () {
+  state.outriggersDeployed = !state.outriggersDeployed;
+  dom.outriggerToggle.classList.toggle('active', state.outriggersDeployed);
+  dom.outriggerToggle.setAttribute('aria-checked', String(state.outriggersDeployed));
+  dom.outriggerToggleLabel.textContent = 'Outriggers · ' + (state.outriggersDeployed ? 'Deployed' : 'Retracted');
+  updateSimulation();
+});
+
+function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+function setCameraMode(mode) {
+  state.cameraMode = mode;
+  dom.viewToggleBtns.forEach(function (b) { b.classList.toggle('active', b.dataset.view === mode); });
+  three.cameraTween = {
+    fromPos: three.camera.position.clone(),
+    fromTarget: three.controls.target.clone(),
+    toPos: (mode === 'top' ? three.topCamPos : three.defaultCamPos).clone(),
+    toTarget: (mode === 'top' ? three.topCamTarget : three.defaultCamTarget).clone(),
+    t: 0
+  };
+}
+dom.viewToggleBtns.forEach(function (btn) {
+  btn.addEventListener('click', function () { setCameraMode(btn.dataset.view); });
+});
+
+dom.resetCameraBtn.addEventListener('click', function () {
+  setCameraMode('crane');
+  dom.resetCameraBtn.classList.add('spinning');
+  setTimeout(function () { dom.resetCameraBtn.classList.remove('spinning'); }, 420);
+});
+
+dom.toolbarCraneBtn.addEventListener('click', function () { setCameraMode('crane'); });
+dom.toolbarCameraBtn.addEventListener('click', function () {
+  state.autoRotate = !state.autoRotate;
+  three.controls.autoRotate = state.autoRotate;
+  three.controls.autoRotateSpeed = 1.1;
+  dom.toolbarCameraBtn.classList.toggle('active', state.autoRotate);
+});
+dom.toolbarSettingsBtn.addEventListener('click', function () { openSettingsModal(); });
+
+function openSettingsModal() { dom.settingsModal.classList.add('open'); }
+function closeSettingsModal() { dom.settingsModal.classList.remove('open'); }
+dom.settingsCloseBtn.addEventListener('click', closeSettingsModal);
+dom.settingsModal.addEventListener('click', function (e) { if (e.target === dom.settingsModal) closeSettingsModal(); });
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && dom.settingsModal.classList.contains('open')) closeSettingsModal();
+});
+
+function resetToDefaults() {
+  state.boomLength = 28; state.boomAngle = 42.3; state.load = 12.5; state.outriggersDeployed = true;
+  parameterSource = 'angle';
+  updateWorkingRadiusFromAngle();
+  dom.boomLengthSlider.value = '28'; dom.boomLengthInput.value = '28.0';
+  dom.boomAngleSlider.value = '42.3'; dom.boomAngleInput.value = '42.3';
+  dom.loadSlider.value = '12.5'; dom.loadInput.value = '12.5';
+  refreshSliderFill(dom.boomLengthSlider); refreshSliderFill(dom.boomAngleSlider); refreshSliderFill(dom.loadSlider);
+  dom.outriggerToggle.classList.add('active');
+  dom.outriggerToggle.setAttribute('aria-checked', 'true');
+  dom.outriggerToggleLabel.textContent = 'Outriggers · Deployed';
+  setCameraMode('crane');
+  updateSimulation();
+}
+dom.settingsResetBtn.addEventListener('click', function () { resetToDefaults(); closeSettingsModal(); });
+
+function pulseElement(el) {
+  if (!el) return;
+  el.style.transition = 'box-shadow 0.25s ease';
+  el.style.boxShadow = '0 0 0 2px rgba(255,194,46,0.6)';
+  setTimeout(function () { el.style.boxShadow = ''; }, 900);
+}
+function setActiveNavTab(name) {
+  dom.navTabs.forEach(function (t) { t.classList.toggle('active', t.dataset.tab === name); });
+}
+dom.navTabs.forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    const name = tab.dataset.tab;
+    setActiveNavTab(name);
+    if (name === 'simulator') {
+      document.querySelector('.panel-viewer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setCameraMode('crane');
+    } else if (name === 'loadchart') {
+      const el = document.querySelector('.panel-right');
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      pulseElement(el);
+    } else if (name === 'sensors') {
+      const el = document.querySelector('.panel-sensors');
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      pulseElement(el);
+    } else if (name === 'stability') {
+      setCameraMode('top');
+      const seg = dom.statusStabilityValue.closest('.status-segment');
+      document.querySelector('.panel-sensors').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      pulseElement(seg);
+    } else if (name === 'settings') {
+      openSettingsModal();
+      setActiveNavTab('simulator');
+    }
+  });
+});
+
+function onResize() {
+  const w = dom.viewport.clientWidth, h = dom.viewport.clientHeight;
+  if (!w || !h || !three.renderer) return;
+  three.camera.aspect = w / h;
+  three.camera.updateProjectionMatrix();
+  three.renderer.setSize(w, h);
+}
+window.addEventListener('resize', onResize);
+
+/* ======================================================================
+   SECTION 9 — RENDER LOOP
+   ====================================================================== */
+function animate() {
+  requestAnimationFrame(animate);
+
+  three.outriggerAnimValue = lerp(three.outriggerAnimValue, three.outriggerAnimTarget, 0.1);
+  applyOutriggerAnimVisual();
+
+  if (three.cameraTween) {
+    three.cameraTween.t = Math.min(1, three.cameraTween.t + 0.022);
+    const e = easeInOutCubic(three.cameraTween.t);
+    three.camera.position.lerpVectors(three.cameraTween.fromPos, three.cameraTween.toPos, e);
+    three.controls.target.lerpVectors(three.cameraTween.fromTarget, three.cameraTween.toTarget, e);
+    if (three.cameraTween.t >= 1) three.cameraTween = null;
+  }
+
+  three.controls.update();
+
+  if (dom.compassNeedle) {
+    const az = three.controls.getAzimuthalAngle();
+    dom.compassNeedle.style.transform = 'rotate(' + (-az * 180 / Math.PI) + 'deg)';
+  }
+
+  three.renderer.render(three.scene, three.camera);
+}
+
+/* ======================================================================
+   SECTION 10 — INIT
+   ====================================================================== */
+function init() {
+  initScene();
+
+  bindBoomLengthControl();
+  bindBoomAngleControl();
+  bindWorkingRadiusControl();
+  bindNumericControl(dom.loadSlider, dom.loadInput, 'load', 1);
+
+  populateInterpolationCheckTable();
+  updateSimulation();
+  applyOutriggerAnimVisual();
+
+  animate();
+  onResize();
+  setTimeout(onResize, 150);
+  window.addEventListener('load', onResize);
+}
+
+init();
+
+</script>
+</body>
+</html>

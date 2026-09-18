@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensor & Instrumentation Panel — Mobile Crane Digital Twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/panel.css">
+</head>
+<body>
+<div class="panel-page">
+
+  <div class="panel-eyebrow">
+    <span>Mobile Crane Digital Twin — Live Telemetry</span>
+    <span class="clock" id="clock"></span>
+  </div>
+  <h1 class="panel-title">Sensor &amp; Instrumentation Panel</h1>
+
+  <div class="alert-banner level-ok" id="alertBanner">
+    <span class="alert-label" id="alertLabel">NORMAL OPERATION</span>
+    <span class="alert-reason" id="alertReason">—</span>
+  </div>
+
+  <div class="panel-grid">
+    <div class="panel-col">
+      <div class="col-title">Simulated Controls</div>
+
+      <div class="control">
+        <div class="control-head">
+          <span class="control-label">Boom Length</span>
+          <span class="control-value" id="valBoomLength">—</span>
+        </div>
+        <input type="range" id="inBoomLength" min="13.3" max="70" step="0.1" value="30">
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <span class="control-label">Boom Angle</span>
+          <span class="control-value" id="valBoomAngle">—</span>
+        </div>
+        <input type="range" id="inBoomAngle" min="-1.5" max="82" step="0.1" value="60">
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <span class="control-label">Slew Angle <span class="hint">(for stability check)</span></span>
+          <span class="control-value" id="valSlew">—</span>
+        </div>
+        <input type="range" id="inSlew" min="0" max="359" step="1" value="0">
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <span class="control-label">Load</span>
+          <span class="control-value" id="valLoad">—</span>
+        </div>
+        <input type="range" id="inLoad" min="0" max="130" step="0.5" value="15">
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <span class="control-label">Outrigger Condition</span>
+        </div>
+        <select id="inOutrigger">
+          <option value="full">Deployed — Full (8.95 × 7.8 m)</option>
+          <option value="stowed">Stowed — Not Deployed</option>
+        </select>
+      </div>
+
+      <div class="btn-row">
+        <button class="panel-btn" id="btnDemo" type="button">Run demo sequence</button>
+        <button class="panel-btn" id="btnReset" type="button">Reset</button>
+      </div>
+    </div>
+
+    <div class="panel-col">
+      <div class="col-title">Live Readout — 6 Parameters</div>
+      <div class="sensor-tiles">
+        <div class="tile" id="tileLoad">
+          <div class="tile-label">Load</div>
+          <div class="tile-value">—</div>
+        </div>
+        <div class="tile" id="tileAngle">
+          <div class="tile-label">Boom Angle</div>
+          <div class="tile-value">—</div>
+        </div>
+        <div class="tile" id="tileLength">
+          <div class="tile-label">Boom Length</div>
+          <div class="tile-value">—</div>
+        </div>
+        <div class="tile" id="tileRadius">
+          <div class="tile-label">Working Radius</div>
+          <div class="tile-value">—</div>
+          <div class="tile-note">Computed — radiusFromAngle()</div>
+        </div>
+        <div class="tile" id="tileOutrigger">
+          <div class="tile-label">Outrigger Condition</div>
+          <div class="tile-value">—</div>
+        </div>
+        <div class="tile" id="tilePressure">
+          <div class="tile-label">Hydraulic Pressure</div>
+          <div class="tile-value">—</div>
+          <div class="tile-note">Modelled from load — not a measured sensor</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-block">
+    <div class="status-item">
+      <div class="status-item-header">
+        <span class="status-item-name">Rated Capacity </span>
+        <span class="status-item-val" id="capVal">—</span>
+      </div>
+      <div class="tile-note" id="capNote"></div>
+    </div>
+    <div class="status-item">
+      <div class="status-item-header">
+        <span class="status-item-name">Utilization (Load ÷ Rated Capacity)</span>
+        <span class="status-item-val" id="utilVal">—</span>
+      </div>
+      <div class="status-track"><div class="status-fill" id="utilFill" style="width:0%"></div></div>
+    </div>
+    <div class="status-item">
+      <div class="status-item-header">
+        <span class="status-item-name">Support-Polygon Stability </span>
+        <span class="status-item-val" id="stabVal">—</span>
+      </div>
+      <div class="status-track"><div class="status-fill" id="stabFill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <div class="panel-footer">
+    <span>Load chart: Grove GMK5250L-1 · Full outriggers · source cited in loadchart.js</span>
+    <span>Last updated <span id="lastUpdated">—</span></span>
+  </div>
+
+</div>
+<script type="module" src="../js/panel.js"></script>
+<script type="module">
+  setInterval(() => {
+    const c = document.getElementById('clock');
+    if (c) c.textContent = new Date().toLocaleTimeString();
+  }, 1000);
+</script>
+</body>
+</html>
