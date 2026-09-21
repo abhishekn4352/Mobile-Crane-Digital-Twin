@@ -11,8 +11,8 @@
 // ─────────────────────────────────────────────────────────────────────────────────
 
 export const CHART = {
-  model:  'Grove GMK5250L-1',
-  source: 'https://www.manitowoc.com/media/15016/download',
+  model: 'Grove GMK5250L-1',
+  source: 'https://www.manitowoc.com/media/15016/download', // Page No : 17 and 18
   config: 'Full outriggers — 7.8 m spread | 80 t counterweight | 360° | EN 13000',
 
   // Boom lengths (m) — MUST be ascending
@@ -26,11 +26,11 @@ export const CHART = {
   //
   //                r=5    r=8    r=10   r=12   r=15   r=20   r=30
   capacityT: [
-    /* boom 13.3 */ [121.0, 84.5,  64.5,  null,  null,  null,  null ],
-    /* boom 23.6 */ [111.0, 83.5,  68.0,  57.0,  45.0,  27.0,  null ],
-    /* boom 38.0 */ [ 59.0, 58.5,  53.0,  47.5,  40.0,  30.5,  17.2 ],
-    /* boom 52.4 */ [ null, null,  31.0,  31.0,  28.5,  23.5,  15.0 ],
-    /* boom 70.0 */ [ null, null,  null,  14.5,  14.5,  14.5,  12.4 ],
+    /* boom 13.3 */[121.0, 84.5, 64.5, null, null, null, null],
+    /* boom 23.6 */[111.0, 83.5, 68.0, 57.0, 45.0, 27.0, null],
+    /* boom 38.0 */[59.0, 58.5, 53.0, 47.5, 40.0, 30.5, 17.2],
+    /* boom 52.4 */[null, null, 31.0, 31.0, 28.5, 23.5, 15.0],
+    /* boom 70.0 */[null, null, null, 14.5, 14.5, 14.5, 12.4],
   ],
 };
 
@@ -48,11 +48,11 @@ export const CHART = {
 export function ratedCapacity(chart, boomLengthM, radiusM) {
   const booms = chart.boomLengthsM;
   const radii = chart.radiiM;
-  const cap   = chart.capacityT;
+  const cap = chart.capacityT;
 
   // ── 1. Range check ──────────────────────────────────────────────────────────
   if (boomLengthM < booms[0] || boomLengthM > booms[booms.length - 1]) return null;
-  if (radiusM     < radii[0] || radiusM     > radii[radii.length - 1]) return null;
+  if (radiusM < radii[0] || radiusM > radii[radii.length - 1]) return null;
 
   // ── 2. Find bracketing boom-length indices (i1, i2) ────────────────────────
   let i1 = booms.length - 2;
@@ -79,7 +79,7 @@ export function ratedCapacity(chart, boomLengthM, radiusM) {
 
   // ── 5. Bilinear interpolation ────────────────────────────────────────────────
   const tb = (boomLengthM - booms[i1]) / (booms[i2] - booms[i1]); // 0→1
-  const tr = (radiusM     - radii[j1]) / (radii[j2] - radii[j1]); // 0→1
+  const tr = (radiusM - radii[j1]) / (radii[j2] - radii[j1]); // 0→1
 
   // Step A — interpolate along boom-length at each bracketing radius
   const atRadiusLo = c11 + tb * (c21 - c11);
@@ -137,11 +137,11 @@ export function validate(chart, cells, tolerancePct = 10) {
 // ─────────────────────────────────────────────────────────────────────────────────
 export const VALIDATION_CELLS = [
   // A — Exact chart cells (taken directly from PDF)
-  { boomLengthM: 13.3, radiusM:  5, chartT: 121.0 },
-  { boomLengthM: 23.6, radiusM:  8, chartT:  83.5 },
-  { boomLengthM: 38.0, radiusM: 12, chartT:  47.5 },
-  { boomLengthM: 52.4, radiusM: 20, chartT:  23.5 },
-  { boomLengthM: 70.0, radiusM: 30, chartT:  12.4 },
+  { boomLengthM: 13.3, radiusM: 5, chartT: 121.0 },
+  { boomLengthM: 23.6, radiusM: 8, chartT: 83.5 },
+  { boomLengthM: 38.0, radiusM: 12, chartT: 47.5 },
+  { boomLengthM: 52.4, radiusM: 20, chartT: 23.5 },
+  { boomLengthM: 70.0, radiusM: 30, chartT: 12.4 },
 
   // B — Interpolated (midpoints between known cells — hand-check these on paper!)
   // boom=30.8m (midpoint 23.6–38.0), radius=10m
