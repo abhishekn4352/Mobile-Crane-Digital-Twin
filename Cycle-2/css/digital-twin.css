@@ -1,0 +1,371 @@
+/* ============================================================
+   DIGITAL TWIN INTEGRATION PANEL
+   Rushikesh — Cycle 2 integration layer
+
+   This stylesheet is intentionally scoped to #digital-twin-panel
+   so it cannot disturb the original Cycle-1 website.
+============================================================ */
+
+#digital-twin-panel {
+  margin-top: 70px;
+  padding: 48px 0 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+#digital-twin-panel .dt-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  margin-bottom: 16px;
+}
+
+#digital-twin-panel .dt-title {
+  font-family: var(--font-head);
+  font-size: clamp(30px, 4vw, 48px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  color: var(--text-dark);
+  margin-bottom: 12px;
+}
+
+#digital-twin-panel .dt-sub {
+  max-width: 720px;
+  color: var(--text-dark-sec);
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 32px;
+}
+
+/* Alert */
+
+#digital-twin-panel .alert-banner {
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--green-ok);
+  background: var(--dark-surface);
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+#digital-twin-panel .alert-banner.level-warning {
+  border-left-color: var(--amber);
+}
+
+#digital-twin-panel .alert-banner.level-critical {
+  border-left-color: var(--red-crit);
+}
+
+#digital-twin-panel .alert-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--green-ok);
+}
+
+#digital-twin-panel .alert-banner.level-warning .alert-label {
+  color: var(--amber);
+}
+
+#digital-twin-panel .alert-banner.level-critical .alert-label {
+  color: var(--red-crit);
+}
+
+#digital-twin-panel .alert-reason {
+  font-size: 14px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+/* Main control/readout layout */
+
+#digital-twin-panel .dt-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+#digital-twin-panel .dt-col {
+  background: var(--dark-surface);
+  padding: 32px;
+}
+
+#digital-twin-panel .dt-col-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+/* Controls */
+
+#digital-twin-panel .dt-control {
+  margin-bottom: 24px;
+}
+
+#digital-twin-panel .dt-control-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+#digital-twin-panel .dt-control-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+#digital-twin-panel .dt-control-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--crane-yellow);
+}
+
+#digital-twin-panel input[type="range"] {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--crane-yellow);
+  cursor: pointer;
+}
+
+#digital-twin-panel select {
+  width: 100%;
+  background: var(--dark-base);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+#digital-twin-panel .dt-button-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+
+#digital-twin-panel button.panel-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 11px 16px;
+  cursor: pointer;
+}
+
+#digital-twin-panel button.panel-btn:hover,
+#digital-twin-panel button.panel-btn.active {
+  border-color: var(--crane-yellow);
+  color: var(--crane-yellow);
+}
+
+/* Six sensor tiles */
+
+#digital-twin-panel .sensor-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+
+#digital-twin-panel .tile {
+  background: var(--dark-base);
+  padding: 24px 20px;
+}
+
+#digital-twin-panel .tile-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+#digital-twin-panel .tile-value {
+  font-family: var(--font-head);
+  font-size: 28px;
+  color: var(--text-primary);
+}
+
+#digital-twin-panel .tile-value .unit {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-left: 5px;
+}
+
+#digital-twin-panel .tile-note {
+  font-size: 11px;
+  color: var(--text-dark-sec);
+  margin-top: 7px;
+}
+
+#digital-twin-panel .tile.state-warn .tile-value {
+  color: var(--amber);
+}
+
+#digital-twin-panel .tile.state-crit .tile-value {
+  color: var(--red-crit);
+}
+
+/* Derived status */
+
+#digital-twin-panel .status-block {
+  background: var(--dark-base);
+  border: 1px solid var(--border);
+  padding: 30px;
+  margin-top: 1px;
+}
+
+#digital-twin-panel .status-item {
+  margin-bottom: 20px;
+}
+
+#digital-twin-panel .status-item:last-child {
+  margin-bottom: 0;
+}
+
+#digital-twin-panel .status-item-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+#digital-twin-panel .status-item-name,
+#digital-twin-panel .status-item-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#digital-twin-panel .status-item-name {
+  color: var(--text-secondary);
+}
+
+#digital-twin-panel .status-item-val.ok {
+  color: var(--green-ok);
+}
+
+#digital-twin-panel .status-item-val.warn {
+  color: var(--amber);
+}
+
+#digital-twin-panel .status-item-val.crit {
+  color: var(--red-crit);
+}
+
+#digital-twin-panel .status-track {
+  height: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+#digital-twin-panel .status-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+#digital-twin-panel .status-fill.ok {
+  background: var(--green-ok);
+}
+
+#digital-twin-panel .status-fill.warn {
+  background: var(--amber);
+}
+
+#digital-twin-panel .status-fill.crit {
+  background: var(--red-crit);
+}
+
+#digital-twin-panel .panel-footer {
+  margin-top: 20px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dark-sec);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 860px) {
+  #digital-twin-panel .dt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #digital-twin-panel .sensor-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  #digital-twin-panel .dt-col {
+    padding: 24px 18px;
+  }
+
+  #digital-twin-panel .sensor-tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   CYCLE 2 — FULL SCREEN SIMULATOR
+   ============================================================ */
+
+#live-twin {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Hide main website header while Live Simulator is active */
+#nav.simulator-active {
+  transform: translateY(-100%);
+  transition: transform 0.35s ease;
+} 
+
+#live-twin iframe {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 80px);
+  min-height: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Remove old Cycle 2 page spacing */
+#live-twin .dt-wrap,
+#live-twin .dt-container {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}

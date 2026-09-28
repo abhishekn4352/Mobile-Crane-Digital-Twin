@@ -1,0 +1,3020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile Crane — Digital Experience</title>
+<meta name="description" content="Explore the engineering, mechanics and technology behind a mobile crane. A premium interactive digital experience.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/digital-twin.css">
+<style>
+/* ============================================================
+   CSS CUSTOM PROPERTIES — DESIGN TOKENS
+============================================================ */
+:root {
+  --dark-base:       #111211;
+  --dark-surface:    #181A18;
+  --dark-secondary:  #202220;
+  --border:          #2B2D29;
+  --border-light:    #D0CEC6;
+  --text-primary:    #F1F0E9;
+  --text-secondary:  #9A9B95;
+  --text-dark:       #1C1E1C;
+  --text-dark-sec:   #5C5E5A;
+  --crane-yellow:    #E4B51C;
+  --crane-yellow-d:  #B8920F;
+  --light-warm:      #F4F2EA;
+  --light-surface:   #EDEBE3;
+  --amber:           #D4881A;
+  --red-crit:        #A63228;
+  --green-ok:        #3A6B42;
+  --font-head:       'IBM Plex Sans', sans-serif;
+  --font-body:       'Manrope', sans-serif;
+  --font-mono:       'IBM Plex Mono', monospace;
+  --transition:      0.35s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ============================================================
+   RESET & BASE
+============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--dark-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.65;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+img { display: block; max-width: 100%; }
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+ul { list-style: none; }
+
+/* ============================================================
+   TYPOGRAPHY UTILITIES
+============================================================ */
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.section-eyebrow::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: var(--crane-yellow);
+  flex-shrink: 0;
+}
+.section-number {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--crane-yellow);
+}
+.section-number.dark { color: var(--crane-yellow-d); }
+
+/* ============================================================
+   LAYOUT CONTAINERS
+============================================================ */
+.container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 80px;
+}
+@media (max-width: 1100px) { .container { padding: 0 48px; } }
+@media (max-width: 768px)  { .container { padding: 0 24px; } }
+
+/* ============================================================
+   SCROLL REVEAL
+============================================================ */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.75s ease, transform 0.75s ease;
+}
+.reveal.in { opacity: 1; transform: translateY(0); }
+.reveal-delay-1 { transition-delay: 0.12s; }
+.reveal-delay-2 { transition-delay: 0.24s; }
+.reveal-delay-3 { transition-delay: 0.36s; }
+.reveal-delay-4 { transition-delay: 0.48s; }
+
+/* ============================================================
+   NAVIGATION
+============================================================ */
+#nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 48px;
+  justify-content: space-between;
+  border-bottom: 1px solid transparent;
+  transition: background var(--transition), border-color var(--transition);
+}
+#nav.scrolled {
+  background: rgba(17,18,17,0.95);
+  border-bottom-color: var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.nav-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+  gap: 3px;
+}
+.nav-brand-title {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.nav-brand-sub {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--crane-yellow);
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.nav-links a {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+  position: relative;
+  padding-bottom: 2px;
+}
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 0; height: 1px;
+  background: var(--crane-yellow);
+  transition: width 0.3s;
+}
+.nav-links a:hover, .nav-links a.active { color: var(--text-primary); }
+.nav-links a.active::after, .nav-links a:hover::after { width: 100%; }
+.nav-explore {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--crane-yellow);
+  border: 1px solid var(--crane-yellow);
+  padding: 7px 16px;
+  background: none;
+  transition: background 0.2s, color 0.2s;
+}
+.nav-explore:hover { background: var(--crane-yellow); color: var(--dark-base); }
+#nav-hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 6px;
+}
+#nav-hamburger span {
+  display: block;
+  width: 20px; height: 1.5px;
+  background: var(--text-primary);
+  transition: all 0.3s;
+}
+/* Mobile nav overlay */
+#mobile-nav {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--dark-base);
+  z-index: 999;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+#mobile-nav.open { display: flex; }
+#mobile-nav a {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+#mobile-nav a:hover { color: var(--crane-yellow); }
+#mobile-nav-close {
+  position: absolute;
+  top: 18px; right: 24px;
+  background: none; border: none;
+  font-size: 22px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+@media (max-width: 900px) {
+  .nav-links { display: none; }
+  .nav-explore { display: none; }
+  #nav-hamburger { display: flex; }
+  #nav { padding: 0 24px; }
+}
+
+/* ============================================================
+   IMAGE / VIDEO / 3D PLACEHOLDERS
+============================================================ */
+.ph-3d {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--dark-surface);
+  border: 1px dashed #2B2D29;
+  pointer-events: none;
+  z-index: 1;
+}
+.ph-3d.hidden { display: none; }
+.ph-3d-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #2B2D29;
+}
+.ph-img {
+  width: 100%;
+  height: 100%;
+  background: var(--dark-secondary);
+  border: 1px dashed var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+.ph-img-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--border);
+}
+.ph-img svg { opacity: 0.18; }
+
+/* ============================================================
+   SECTION 01 — HERO
+============================================================ */
+#hero {
+  position: relative;
+  min-height: 100vh;
+  background: var(--dark-base);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+#hero-left {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 120px 60px 80px 80px;
+}
+#hero-right {
+  position: relative;
+  overflow: hidden;
+}
+#hero-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hero-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 52px;
+}
+.hero-meta-item {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
+}
+.hero-headline {
+  font-family: var(--font-head);
+  font-size: clamp(56px, 6.5vw, 108px);
+  font-weight: 600;
+  line-height: 0.95;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+  margin-bottom: 28px;
+}
+.hero-headline span { color: var(--crane-yellow); display: block; }
+.hero-subtext {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 400px;
+  margin-bottom: 52px;
+}
+.hero-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.btn-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  background: var(--crane-yellow);
+  color: var(--dark-base);
+  padding: 16px 32px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  align-self: flex-start;
+}
+.btn-cta:hover { background: #f0c220; transform: translateX(3px); }
+.btn-cta-arrow { font-size: 14px; }
+.btn-scroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: color 0.2s;
+  align-self: flex-start;
+}
+.btn-scroll:hover { color: var(--text-primary); }
+.scroll-arrow-icon {
+  display: inline-block;
+  animation: bounceDown 2.2s ease-in-out infinite;
+}
+@keyframes bounceDown {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
+}
+
+/* 3D controls bar */
+#hero-3d-controls {
+  position: absolute;
+  bottom: 32px;
+  right: 32px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+}
+.ctrl-btn {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 7px 14px;
+  background: rgba(17,18,17,0.7);
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(6px);
+}
+.ctrl-btn:hover { color: var(--crane-yellow); border-color: var(--crane-yellow); }
+
+/* Hero annotations (right side) */
+.hero-annotations {
+  position: absolute;
+  top: 50%;
+  right: 28px;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  pointer-events: none;
+}
+.annot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  animation: annotIn 0.6s ease forwards;
+}
+.annot:nth-child(1) { animation-delay: 1.2s; }
+.annot:nth-child(2) { animation-delay: 1.5s; }
+.annot:nth-child(3) { animation-delay: 1.8s; }
+.annot:nth-child(4) { animation-delay: 2.1s; }
+@keyframes annotIn { to { opacity: 1; } }
+.annot-line { width: 32px; height: 1px; background: var(--border); }
+.annot-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--crane-yellow);
+  flex-shrink: 0;
+}
+.annot-text {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Hero bottom info bar */
+.hero-infobar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  height: 52px;
+  border-top: 1px solid var(--border);
+  background: rgba(17,18,17,0.5);
+  display: flex;
+  align-items: center;
+  padding: 0 80px;
+  gap: 48px;
+  backdrop-filter: blur(6px);
+}
+.infobar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.infobar-key {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.infobar-val {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  color: var(--crane-yellow);
+}
+.infobar-sep { width: 1px; height: 20px; background: var(--border); }
+
+@media (max-width: 900px) {
+  #hero { grid-template-columns: 1fr; min-height: auto; }
+  #hero-left { padding: 100px 24px 60px; }
+  #hero-right { height: 55vw; min-height: 320px; position: relative; }
+  .hero-annotations { display: none; }
+  .hero-infobar { padding: 0 24px; gap: 20px; flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; }
+}
+
+/* ============================================================
+   SECTION 02 — WHAT IS A MOBILE CRANE (Light)
+============================================================ */
+#machine {
+  background: var(--light-warm);
+  color: var(--text-dark);
+  padding: 130px 0;
+}
+.machine-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: center;
+}
+.machine-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 64px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text-dark);
+  margin-bottom: 28px;
+}
+.machine-body {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--text-dark-sec);
+  margin-bottom: 18px;
+}
+.spec-table {
+  margin-top: 48px;
+  border-top: 1px solid var(--border-light);
+}
+.spec-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-light);
+  gap: 16px;
+}
+.spec-k {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  flex-shrink: 0;
+}
+.spec-v {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dark);
+  text-align: right;
+}
+/* Image placeholder for machine section */
+.machine-img-wrap {
+  position: relative;
+  aspect-ratio: 4/3;
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  background: #E8E6DE;
+}
+.machine-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.machine-img-callouts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Four corner callout labels */
+.img-callout {
+  position: absolute;
+  background: rgba(244,242,234,0.9);
+  border: 1px solid var(--border-light);
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dark);
+  backdrop-filter: blur(4px);
+}
+.img-callout.tl { top: 16px; left: 16px; }
+.img-callout.tr { top: 16px; right: 16px; }
+.img-callout.bl { bottom: 16px; left: 16px; }
+.img-callout.br { bottom: 16px; right: 16px; }
+
+@media (max-width: 900px) {
+  .machine-grid { grid-template-columns: 1fr; gap: 48px; }
+}
+
+/* ============================================================
+   SECTION 03 — INTERACTIVE ANATOMY (Dark)
+============================================================ */
+#anatomy {
+  background: var(--dark-surface);
+  padding: 120px 0 0;
+}
+.anatomy-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 56px;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.anatomy-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  line-height: 1.0;
+  letter-spacing: -0.025em;
+}
+.anatomy-hint {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  line-height: 2;
+  text-align: right;
+}
+/* Main interactive area */
+.anatomy-stage {
+  position: relative;
+  display: flex;
+  height: 700px;
+  overflow: hidden;
+}
+#anatomy-canvas { width: 100%; height: 100%; display: block; }
+/* Component info panel */
+.comp-panel {
+  width: 360px;
+  flex-shrink: 0;
+  background: var(--dark-base);
+  border-left: 1px solid var(--border);
+  padding: 0;
+  transform: translateX(100%);
+  transition: transform var(--transition);
+  overflow-y: auto;
+  position: relative;
+}
+.comp-panel.open { transform: translateX(0); }
+.panel-inner { padding: 36px 32px; }
+.panel-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  background: none; border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 0.2s;
+  line-height: 1;
+}
+.panel-close:hover { color: var(--text-primary); }
+.panel-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--crane-yellow);
+  margin-bottom: 10px;
+}
+.panel-name {
+  font-family: var(--font-head);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 28px;
+}
+.panel-field { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+.panel-field:last-child { border-bottom: none; padding-bottom: 0; }
+.panel-field-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.panel-field-text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+.panel-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.panel-tag {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 4px 9px;
+}
+/* Hover tooltip */
+#crane-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: rgba(17,18,17,0.92);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 999;
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+/* Group filter bar */
+.anatomy-filters {
+  background: var(--dark-base);
+  border-top: 1px solid var(--border);
+  padding: 18px 80px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.filter-btn {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  background: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.filter-btn:hover { color: var(--crane-yellow); border-color: var(--crane-yellow); }
+.filter-btn.active { color: var(--crane-yellow); border-color: var(--crane-yellow); background: rgba(228,181,28,0.06); }
+
+@media (max-width: 900px) {
+  .anatomy-stage { height: 420px; flex-direction: column; }
+  .comp-panel { width: 100%; transform: translateY(100%); border-left: none; border-top: 1px solid var(--border); }
+  .comp-panel.open { transform: translateY(0); }
+  .anatomy-filters { padding: 16px 24px; }
+}
+
+/* ============================================================
+   SECTION 04 — EXPLODED VIEW (Dark)
+============================================================ */
+#exploded {
+  background: var(--dark-base);
+  padding: 120px 0;
+}
+.exploded-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-bottom: 12px;
+}
+.exploded-sub {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin-bottom: 56px;
+  line-height: 1.7;
+}
+.exploded-stage {
+  position: relative;
+  height: 620px;
+  background: var(--dark-surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.exploded-video-element { width: 100%; height: 100%; object-fit: cover; display: block; filter: brightness(0.9); }
+
+
+/* ============================================================
+   SECTION 05 — COMPONENT INTELLIGENCE (Light)
+============================================================ */
+#components {
+  background: var(--light-warm);
+  color: var(--text-dark);
+  padding: 120px 0;
+}
+.comp-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text-dark);
+  margin-bottom: 12px;
+}
+.comp-sub-text {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-dark-sec);
+  max-width: 480px;
+  margin-bottom: 64px;
+}
+.comp-viewer {
+  border: 1px solid var(--border-light);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 540px;
+}
+.comp-visual-zone {
+  border-right: 1px solid var(--border-light);
+  background: var(--dark-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+.comp-img-art { width: 100%; height: 100%; object-fit: cover; }
+.comp-info-zone {
+  padding: 48px 44px;
+  display: flex;
+  flex-direction: column;
+}
+.ci-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--crane-yellow-d);
+  margin-bottom: 10px;
+}
+.ci-name {
+  font-family: var(--font-head);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 36px;
+  line-height: 1.15;
+}
+.ci-field { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--border-light); }
+.ci-field:last-of-type { border-bottom: none; padding-bottom: 0; }
+.ci-field-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  margin-bottom: 8px;
+}
+.ci-field-text {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-dark-sec);
+  line-height: 1.7;
+}
+.ci-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ci-tag {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  border: 1px solid var(--border-light);
+  padding: 4px 9px;
+}
+.comp-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-light);
+}
+.comp-nav-btn {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  background: none; border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+  padding: 6px 0;
+}
+.comp-nav-btn:hover { color: var(--crane-yellow-d); }
+.comp-nav-indicator {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-dark-sec);
+}
+@media (max-width: 900px) {
+  .comp-viewer { grid-template-columns: 1fr; }
+  .comp-visual-zone { min-height: 280px; }
+}
+
+/* ============================================================
+   SECTION 06 — HOW IT WORKS (Dark)
+============================================================ */
+#mechanics {
+  background: var(--dark-base);
+  padding: 120px 0;
+}
+.mech-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-bottom: 12px;
+}
+.mech-sub-text {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin-bottom: 72px;
+  line-height: 1.7;
+}
+.mech-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 80px;
+}
+.mech-step {
+  background: var(--dark-surface);
+  padding: 40px 32px;
+  transition: background 0.25s;
+  cursor: default;
+  position: relative;
+}
+.mech-step::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.3s;
+}
+.mech-step:hover { background: var(--dark-secondary); }
+.mech-step:hover::before { background: var(--crane-yellow); }
+.mech-step-num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  color: var(--crane-yellow);
+  margin-bottom: 18px;
+}
+.mech-step-title {
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.mech-step-text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+}
+/* Hydraulic flow diagram */
+.hydraulic-block {
+  border: 1px solid var(--border);
+  background: var(--dark-surface);
+  padding: 56px;
+}
+.hydraulic-title {
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 48px;
+}
+.hyd-flow {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  flex-wrap: wrap;
+}
+.hyd-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 140px;
+}
+.hyd-box {
+  border: 1px solid var(--border);
+  background: var(--dark-base);
+  padding: 18px 20px;
+  text-align: center;
+  width: 100%;
+  transition: border-color 0.4s;
+  position: relative;
+}
+.hyd-box.active {
+  border-color: var(--crane-yellow);
+}
+.hyd-box.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(228,181,28,0.04);
+}
+.hyd-box-sub {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.hyd-box-title {
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 600;
+}
+.hyd-connector {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  align-self: center;
+  flex-shrink: 0;
+}
+.hyd-arrow-wrap {
+  position: relative;
+  width: 40px;
+  height: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+.hyd-arrow-flow {
+  position: absolute;
+  left: -100%; top: 0;
+  width: 100%; height: 100%;
+  background: var(--crane-yellow);
+  animation: flowRight 1.8s linear infinite;
+}
+@keyframes flowRight { to { left: 100%; } }
+.hyd-arrow-head {
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--border);
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .mech-steps-grid { grid-template-columns: 1fr; }
+  .hydraulic-block { padding: 32px 24px; }
+  .hyd-flow { flex-direction: column; align-items: stretch; gap: 0; }
+  .hyd-connector { transform: rotate(90deg); margin: 4px auto; }
+}
+
+/* ============================================================
+   SECTION 07 — SENSOR & INSTRUMENTATION (Light)
+============================================================ */
+#sensors {
+  background: var(--light-warm);
+  color: var(--text-dark);
+  padding: 120px 0;
+}
+.sensors-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text-dark);
+  margin-bottom: 12px;
+}
+.sensors-sub-text {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-dark-sec);
+  max-width: 480px;
+  margin-bottom: 64px;
+  line-height: 1.7;
+}
+/* Sensor map / crane diagram */
+.sensor-map-block {
+  background: var(--dark-surface);
+  border: 1px solid var(--border-light);
+  padding: 48px;
+  margin-bottom: 64px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 60px;
+  align-items: center;
+}
+.sensor-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sensor-legend-title {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.sl-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.sl-item:hover { opacity: 0.7; }
+.sl-item:last-child { border-bottom: none; }
+.sl-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+.sl-dot.lit { background: var(--crane-yellow); border-color: var(--crane-yellow); box-shadow: 0 0 7px rgba(228,181,28,0.5); }
+.sl-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+/* Sensor grid cards */
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: var(--border-light);
+  border: 1px solid var(--border-light);
+}
+.sensor-card {
+  background: var(--light-warm);
+  padding: 36px 32px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.sensor-card:hover, .sensor-card.lit { background: var(--light-surface); }
+.sc-icon { margin-bottom: 20px; }
+.sc-name {
+  font-family: var(--font-head);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dark);
+  margin-bottom: 6px;
+}
+.sc-measure {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--crane-yellow-d);
+  margin-bottom: 20px;
+}
+.sc-field { margin-bottom: 12px; }
+.sc-field-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  margin-bottom: 4px;
+}
+.sc-field-text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-dark-sec);
+  line-height: 1.65;
+}
+@media (max-width: 900px) {
+  .sensor-map-block { grid-template-columns: 1fr; gap: 32px; }
+  .sensor-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   SECTION 08 — CRANE TYPES (Dark)
+============================================================ */
+#types {
+  background: var(--dark-base);
+  padding: 120px 0 0;
+  overflow: hidden;
+}
+.types-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 52px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.types-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.types-count {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.types-gallery {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 1px;
+  padding-left: 80px;
+  scrollbar-width: none;
+}
+.types-gallery::-webkit-scrollbar { display: none; }
+.type-card {
+  flex-shrink: 0;
+  width: 400px;
+  border: 1px solid var(--border);
+  background: var(--dark-surface);
+  scroll-snap-align: start;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+.type-card:hover { border-color: rgba(228,181,28,0.4); }
+.type-card-img {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.82);
+  transition: filter 0.4s;
+}
+.type-card:hover .type-card-img { filter: brightness(1.0); }
+/* Placeholder for type images */
+.type-img-ph {
+  width: 100%;
+  height: 260px;
+  background: var(--dark-secondary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.type-img-ph svg { opacity: 0.15; }
+.type-img-ph-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--border);
+}
+.type-card-body { padding: 26px 26px 30px; }
+.type-card-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--crane-yellow);
+  margin-bottom: 8px;
+}
+.type-card-name {
+  font-family: var(--font-head);
+  font-size: 19px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  line-height: 1.2;
+}
+.type-spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.type-spec-row:last-child { border-bottom: none; }
+.type-spec-k {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.type-spec-v {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+  max-width: 200px;
+}
+.types-controls {
+  padding: 28px 80px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.gallery-arrow {
+  width: 38px; height: 38px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.gallery-arrow:hover { border-color: var(--crane-yellow); color: var(--crane-yellow); }
+.gallery-dots { display: flex; gap: 8px; }
+.gallery-dot {
+  width: 20px; height: 2px;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.gallery-dot.active { background: var(--crane-yellow); }
+@media (max-width: 768px) {
+  .types-gallery { padding-left: 24px; }
+  .types-controls { padding: 24px; }
+  .type-card { width: 85vw; }
+}
+
+/* ============================================================
+   SECTION 09 — SAFETY (Dark)
+============================================================ */
+#safety {
+  background: var(--dark-surface);
+  padding: 120px 0;
+}
+.safety-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin-bottom: 12px;
+}
+.safety-sub-text {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-secondary);
+  max-width: 480px;
+  margin-bottom: 72px;
+  line-height: 1.7;
+}
+/* Load moment chain */
+.load-moment-wrap {
+  background: var(--dark-base);
+  border: 1px solid var(--border);
+  padding: 56px;
+  margin-bottom: 64px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: start;
+}
+.lm-chain-title {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+.lm-chain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.lm-node-box {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  padding: 14px 24px;
+  min-width: 180px;
+}
+.lm-arrow {
+  display: flex;
+  align-items: center;
+  padding-left: 28px;
+  height: 30px;
+  position: relative;
+}
+.lm-vert-line {
+  position: absolute;
+  left: 17px; top: 0;
+  width: 2px; height: 100%;
+  background: var(--border);
+  overflow: hidden;
+}
+.lm-vert-line::after {
+  content: '';
+  position: absolute;
+  top: -100%; left: 0;
+  width: 100%; height: 100%;
+  background: var(--crane-yellow);
+  animation: flowDown 2s linear infinite;
+}
+@keyframes flowDown { to { top: 100%; } }
+/* Status bars */
+.status-bars-title {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+}
+.status-item { margin-bottom: 24px; }
+.status-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.status-item-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.status-item-val {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.status-item-val.ok { color: var(--green-ok); }
+.status-item-val.warn { color: var(--amber); }
+.status-item-val.crit { color: var(--red-crit); }
+.status-track {
+  height: 3px;
+  background: var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.status-fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  transition: width 1.2s cubic-bezier(0.4,0,0.2,1);
+}
+.status-fill.ok { background: var(--green-ok); }
+.status-fill.warn { background: var(--amber); }
+.status-fill.crit { background: var(--red-crit); }
+/* Safety cards grid */
+.safety-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+}
+.safety-card {
+  background: var(--dark-surface);
+  padding: 36px 32px;
+}
+.safety-card-icon { margin-bottom: 18px; }
+.safety-card-title {
+  font-family: var(--font-head);
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.safety-card-text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-secondary);
+}
+@media (max-width: 900px) {
+  .load-moment-wrap { grid-template-columns: 1fr; padding: 32px 24px; gap: 40px; }
+  .safety-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .safety-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   SECTION 10 — INDUSTRY (Light)
+============================================================ */
+#industry {
+  background: var(--light-warm);
+  color: var(--text-dark);
+  padding: 120px 0;
+}
+.industry-heading {
+  font-family: var(--font-head);
+  font-size: clamp(36px, 4vw, 68px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text-dark);
+  margin-bottom: 12px;
+}
+.industry-sub-text {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-dark-sec);
+  max-width: 480px;
+  margin-bottom: 72px;
+  line-height: 1.7;
+}
+.industry-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border-light);
+  border: 1px solid var(--border-light);
+  margin-bottom: 72px;
+}
+.stat-cell {
+  background: var(--light-warm);
+  padding: 32px 28px;
+}
+.stat-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  margin-bottom: 14px;
+}
+.stat-value {
+  font-family: var(--font-head);
+  font-size: 38px;
+  font-weight: 600;
+  color: var(--text-dark);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.stat-note {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-dark-sec);
+  line-height: 1.5;
+}
+/* Bar chart */
+.bar-chart-block { margin-bottom: 72px; }
+.bar-chart-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  margin-bottom: 28px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.bar-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  min-width: 110px;
+  text-align: right;
+}
+.bar-track {
+  flex: 1;
+  height: 4px;
+  background: var(--border-light);
+  position: relative;
+}
+.bar-fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  background: var(--crane-yellow-d);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 1.2s cubic-bezier(0.4,0,0.2,1);
+}
+.bar-fill.animated { transform: scaleX(1); }
+.bar-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dark-sec);
+  min-width: 38px;
+}
+/* Industry two-col */
+.industry-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  margin-bottom: 72px;
+}
+.industry-col-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+.mfg-item {
+  display: flex;
+  align-items: center;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border-light);
+  gap: 14px;
+}
+.mfg-num {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  color: var(--text-dark-sec);
+  min-width: 20px;
+}
+.mfg-name {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dark);
+  flex: 1;
+}
+.mfg-country {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dark-sec);
+}
+.trend-item {
+  display: flex;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.trend-num {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--crane-yellow-d);
+  flex-shrink: 0;
+  min-width: 22px;
+}
+.trend-name {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dark);
+  margin-bottom: 6px;
+}
+.trend-desc {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-dark-sec);
+  line-height: 1.65;
+}
+@media (max-width: 900px) {
+  .industry-stats { grid-template-columns: repeat(2, 1fr); }
+  .industry-cols { grid-template-columns: 1fr; gap: 48px; }
+}
+@media (max-width: 600px) {
+  .industry-stats { grid-template-columns: 1fr 1fr; }
+}
+
+/* ============================================================
+   FOOTER
+============================================================ */
+#footer {
+  background: var(--dark-base);
+  border-top: 1px solid var(--border);
+  padding: 60px 80px 40px;
+}
+.footer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 40px;
+  margin-bottom: 48px;
+  flex-wrap: wrap;
+}
+.footer-brand { max-width: 280px; }
+.footer-brand-name {
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+.footer-brand-desc {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.footer-nav {
+  display: flex;
+  gap: 36px;
+  flex-wrap: wrap;
+}
+.footer-nav a {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+.footer-nav a:hover { color: var(--crane-yellow); }
+.footer-bottom {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.footer-copy {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+}
+@media (max-width: 768px) {
+  #footer { padding: 48px 24px 32px; }
+  .footer-top { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<!-- TOOLTIP (global) -->
+<div id="crane-tooltip"></div>
+
+<!-- ============================================================
+     NAVIGATION
+============================================================ -->
+<nav id="nav">
+  <div class="nav-brand">
+    <span class="nav-brand-title">Mobile Crane</span>
+    <span class="nav-brand-sub">Digital Experience</span>
+  </div>
+  <div class="nav-links">
+    <a href="#machine"    data-sec="machine">01 Machine</a>
+    <a href="#anatomy"    data-sec="anatomy">02 Anatomy</a>
+    <a href="#components" data-sec="components">03 Components</a>
+    <a href="#mechanics"  data-sec="mechanics">04 Mechanics</a>
+    <a href="#sensors"    data-sec="sensors">05 Sensors</a>
+    <a href="#types"      data-sec="types">06 Types</a>
+    <a href="#safety"     data-sec="safety">07 Safety</a>
+    <a href="#industry"   data-sec="industry">08 Industry</a>
+  </div>
+  <button class="nav-explore" onclick="document.getElementById('anatomy').scrollIntoView({behavior:'smooth'})">Explore</button>
+  <button id="nav-hamburger" aria-label="Menu" onclick="document.getElementById('mobile-nav').classList.add('open')">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<div id="mobile-nav">
+  <button id="mobile-nav-close" onclick="document.getElementById('mobile-nav').classList.remove('open')">✕</button>
+  <a href="#machine"    onclick="document.getElementById('mobile-nav').classList.remove('open')">01 Machine</a>
+  <a href="#anatomy"    onclick="document.getElementById('mobile-nav').classList.remove('open')">02 Anatomy</a>
+  <a href="#components" onclick="document.getElementById('mobile-nav').classList.remove('open')">03 Components</a>
+  <a href="#mechanics"  onclick="document.getElementById('mobile-nav').classList.remove('open')">04 Mechanics</a>
+  <a href="#sensors"    onclick="document.getElementById('mobile-nav').classList.remove('open')">05 Sensors</a>
+  <a href="#types"      onclick="document.getElementById('mobile-nav').classList.remove('open')">06 Types</a>
+  <a href="#safety"     onclick="document.getElementById('mobile-nav').classList.remove('open')">07 Safety</a>
+  <a href="#industry"   onclick="document.getElementById('mobile-nav').classList.remove('open')">08 Industry</a>
+</div>
+
+<!-- ============================================================
+     SECTION 01 — HERO
+============================================================ -->
+<section id="hero">
+  <div id="hero-left">
+    <div class="hero-meta-row">
+      <span class="hero-meta-item">Mobile Crane</span>
+      <span class="hero-meta-item">Heavy Lifting System</span>
+      <span class="hero-meta-item">Mechanical System</span>
+    </div>
+    <h1 class="hero-headline">The Machine<span>Behind the Lift.</span></h1>
+    <p class="hero-subtext">Explore the engineering, mechanics and technology behind a mobile crane. An interactive digital experience.</p>
+    <div class="hero-actions">
+<a href="#live-twin" class="btn-cta">Explore Live Simulator <span class="btn-cta-arrow">→</span></a>
+        <a href="#machine" class="btn-scroll">↓ <span class="scroll-arrow-icon">Scroll</span> to explore</a>
+    </div>
+  </div>
+
+  <div id="hero-right">
+    <!-- Three.js canvas -->
+    <canvas id="hero-canvas"></canvas>
+
+    <!-- Annotations (right edge) -->
+    <div class="hero-annotations">
+      <div class="annot"><span class="annot-text">Telescopic Boom</span><span class="annot-line"></span><span class="annot-dot"></span></div>
+      <div class="annot"><span class="annot-text">Boom Length</span><span class="annot-line"></span><span class="annot-dot"></span></div>
+      <div class="annot"><span class="annot-text">Max Capacity</span><span class="annot-line"></span><span class="annot-dot"></span></div>
+      <div class="annot"><span class="annot-text">Outrigger System</span><span class="annot-line"></span><span class="annot-dot"></span></div>
+    </div>
+
+    <!-- 3D controls -->
+    <div id="hero-3d-controls">
+      <button class="ctrl-btn" id="btn-rotate">⟳ Rotate</button>
+      <button class="ctrl-btn" id="btn-reset">⊙ Reset</button>
+    </div>
+  </div>
+
+  <!-- Bottom info bar -->
+  <div class="hero-infobar">
+    <div class="infobar-item"><span class="infobar-key">Type</span><span class="infobar-val">All-Terrain Mobile Crane</span></div>
+    <div class="infobar-sep"></div>
+    <div class="infobar-item"><span class="infobar-key">Boom</span><span class="infobar-val">Hydraulic Telescopic</span></div>
+    <div class="infobar-sep"></div>
+    <div class="infobar-item"><span class="infobar-key">Stabilization</span><span class="infobar-val">Hydraulic Outriggers</span></div>
+    <div class="infobar-sep"></div>
+    <div class="infobar-item"><span class="infobar-key">Drive</span><span class="infobar-val">All-Wheel Drive</span></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 02 — WHAT IS A MOBILE CRANE (Light)
+============================================================ -->
+<section id="machine">
+  <div class="container">
+    <div class="machine-grid">
+      <div>
+        <div class="section-eyebrow reveal"><span class="section-number dark">01 / Machine</span></div>
+        <h2 class="machine-heading reveal reveal-delay-1">What is a Mobile Crane?</h2>
+        <p class="machine-body reveal reveal-delay-2">A mobile crane is a cable-controlled or hydraulic-powered crane mounted on rubber-tired carriers or crawler tracks, integrating its own drive system. It is designed to travel to and position itself at a work site without requiring disassembly.</p>
+        <p class="machine-body reveal reveal-delay-2">Mobile cranes combine the lifting capability of fixed cranes with rapid on-site mobility, making them essential in construction, infrastructure, energy, and industrial operations worldwide.</p>
+        <p class="machine-body reveal reveal-delay-2">Their defining characteristic is self-propelled integration — the crane and carrier are a single unit capable of road travel and on-site lifting with hydraulic outrigger stabilization.</p>
+        <div class="spec-table reveal reveal-delay-3">
+          <div class="spec-row"><span class="spec-k">Crane Type</span><span class="spec-v">Mobile Crane</span></div>
+          <div class="spec-row"><span class="spec-k">Mobility</span><span class="spec-v">Road / Construction Site</span></div>
+          <div class="spec-row"><span class="spec-k">Boom Type</span><span class="spec-v">Hydraulic Telescopic</span></div>
+          <div class="spec-row"><span class="spec-k">Stabilization</span><span class="spec-v">Hydraulic Outriggers</span></div>
+          <div class="spec-row"><span class="spec-k">Load Handling</span><span class="spec-v">Hook Block / Load Line</span></div>
+          <div class="spec-row"><span class="spec-k">Control System</span><span class="spec-v">Hydraulic / Electronic</span></div>
+        </div>
+      </div>
+      <div class="reveal reveal-delay-2">
+        <!-- Replace src with actual image when available -->
+        <div class="machine-img-wrap">
+          <img id="machine-img"
+               src="assets/crane-hero.jpg"
+               alt="Mobile crane"
+               onerror="this.style.display='none';this.parentElement.querySelector('.ph-fallback').style.display='flex'">
+          <!-- Fallback placeholder shown if image missing -->
+          <div class="ph-fallback" style="display:none;position:absolute;inset:0;background:#E8E6DE;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="4" y="28" width="40" height="14" stroke="#B8B6AE" stroke-width="1.5"/><line x1="24" y1="4" x2="24" y2="28" stroke="#B8B6AE" stroke-width="1.5"/><path d="M12 14 L24 4 L36 14" stroke="#B8B6AE" stroke-width="1.5" fill="none"/><line x1="4" y1="42" x2="4" y2="48" stroke="#B8B6AE" stroke-width="1.5"/><line x1="44" y1="42" x2="44" y2="48" stroke="#B8B6AE" stroke-width="1.5"/></svg>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size: 15px;letter-spacing:0.2em;text-transform:uppercase;color:#B8B6AE;">[ CRANE IMAGE ]</span>
+          </div>
+          <div class="machine-img-callouts">
+            <span class="img-callout tl">Boom Assembly</span>
+            <span class="img-callout tr">Operator Cabin</span>
+            <span class="img-callout bl">Outrigger System</span>
+            <span class="img-callout br">Hook Block</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 03 — INTERACTIVE CRANE ANATOMY (Dark)
+============================================================ -->
+<section id="anatomy">
+  <div class="container">
+    <div class="anatomy-top">
+      <div>
+        <div class="section-eyebrow"><span class="section-number">02 / Anatomy</span></div>
+        <h2 class="anatomy-heading">Understand<br>the Machine.</h2>
+      </div>
+      <p class="anatomy-hint">Hover to identify components<br>Click to inspect in detail<br>Use filters to isolate groups</p>
+    </div>
+  </div>
+  <div class="anatomy-stage">
+    <div style="flex:1;position:relative;overflow:hidden;">
+      <canvas id="anatomy-canvas"></canvas>
+    </div>
+    <!-- Component info panel (slides in from right) -->
+    <div class="comp-panel" id="comp-panel">
+      <button class="panel-close" onclick="closePanel()">✕</button>
+      <div class="panel-inner">
+        <p class="panel-eyebrow" id="panel-group">GROUP</p>
+        <h3 class="panel-name" id="panel-name">Component</h3>
+        <div class="panel-field">
+          <p class="panel-field-label">Primary Function</p>
+          <p class="panel-field-text" id="panel-function"></p>
+        </div>
+        <div class="panel-field">
+          <p class="panel-field-label">Mechanical Role</p>
+          <p class="panel-field-text" id="panel-role"></p>
+        </div>
+        <div class="panel-field">
+          <p class="panel-field-label">Related Systems</p>
+          <div class="panel-tags" id="panel-systems"></div>
+        </div>
+        <div class="panel-field">
+          <p class="panel-field-label">Sensors</p>
+          <div class="panel-tags" id="panel-sensors"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="anatomy-filters">
+    <button class="filter-btn active" onclick="filterGroup('all',this)">All Components</button>
+    <button class="filter-btn" onclick="filterGroup('chassis',this)">01 Chassis &amp; Base</button>
+    <button class="filter-btn" onclick="filterGroup('outrigger',this)">02 Outrigger</button>
+    <button class="filter-btn" onclick="filterGroup('cabin',this)">03 Cabin &amp; CW</button>
+    <button class="filter-btn" onclick="filterGroup('boom',this)">04 Boom Assembly</button>
+    <button class="filter-btn" onclick="filterGroup('rigging',this)">05 Rigging</button>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 04 — EXPLODED VIEW (Dark)
+============================================================ -->
+<section id="exploded">
+  <div class="container">
+    <div class="section-eyebrow reveal"><span class="section-number">03 / Assembly</span></div>
+    <h2 class="exploded-heading reveal reveal-delay-1">Engineering Disassembly.</h2>
+    <p class="exploded-sub reveal reveal-delay-2">Controlled mechanical separation — a systematic view of how the crane is constructed, component by component.</p>
+
+    <div class="exploded-stage reveal reveal-delay-2">
+      <video id="exploded-video" src="assets/video/explod_video.mp4" autoplay loop muted playsinline class="exploded-video-element"></video>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 05 — COMPONENT INTELLIGENCE (Light)
+============================================================ -->
+<section id="components">
+  <div class="container">
+    <div class="section-eyebrow reveal"><span class="section-number dark">04 / Components</span></div>
+    <h2 class="comp-heading reveal reveal-delay-1">Component Intelligence.</h2>
+    <p class="comp-sub-text reveal reveal-delay-2">A technical catalogue of every major system in the mobile crane — function, mechanical role, and monitored parameters.</p>
+
+    <div class="comp-viewer reveal reveal-delay-2">
+      <div class="comp-visual-zone">
+        <img class="comp-img-art" id="comp-img" src="" alt="Component Image" />
+      </div>
+      <div class="comp-info-zone">
+        <p class="ci-eyebrow" id="ci-eyebrow">01 / BOOM ASSEMBLY</p>
+        <h3 class="ci-name" id="ci-name">Main Boom</h3>
+        <div class="ci-field">
+          <p class="ci-field-label">Primary Function</p>
+          <p class="ci-field-text" id="ci-function"></p>
+        </div>
+        <div class="ci-field">
+          <p class="ci-field-label">Mechanical Role</p>
+          <p class="ci-field-text" id="ci-role"></p>
+        </div>
+        <div class="ci-field">
+          <p class="ci-field-label">Connected Systems</p>
+          <div class="ci-tags" id="ci-systems"></div>
+        </div>
+        <div class="ci-field">
+          <p class="ci-field-label">Monitored Parameters</p>
+          <div class="ci-tags" id="ci-params"></div>
+        </div>
+        <div class="comp-nav-bar">
+          <button class="comp-nav-btn" onclick="prevComp()">← Previous</button>
+          <span class="comp-nav-indicator" id="comp-indicator">1 / 14</span>
+          <button class="comp-nav-btn" onclick="nextComp()">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 06 — HOW DOES A MOBILE CRANE WORK (Dark)
+============================================================ -->
+<section id="mechanics">
+  <div class="container">
+    <div class="section-eyebrow reveal"><span class="section-number">05 / Mechanics</span></div>
+    <h2 class="mech-heading reveal reveal-delay-1">The Operating Sequence.</h2>
+    <p class="mech-sub-text reveal reveal-delay-2">From site arrival to lift completion — six phases of mobile crane operation, each with its own mechanical and safety requirements.</p>
+
+    <div class="mech-steps-grid reveal reveal-delay-2">
+      <div class="mech-step">
+        <p class="mech-step-num">01 — Positioning</p>
+        <h3 class="mech-step-title">Site Positioning</h3>
+        <p class="mech-step-text">The crane drives to the designated lift area under its own power. The operator selects the optimal position relative to the load and placement point, accounting for ground conditions, overhead clearances and working radius requirements.</p>
+      </div>
+      <div class="mech-step">
+        <p class="mech-step-num">02 — Stabilization</p>
+        <h3 class="mech-step-title">Outrigger Deployment</h3>
+        <p class="mech-step-text">Outrigger beams extend laterally and hydraulic cylinders lower the outrigger pads onto prepared ground. This transfers the crane's weight from the tires to the pads, significantly increasing the rated capacity and operating stability.</p>
+      </div>
+      <div class="mech-step">
+        <p class="mech-step-num">03 — Boom Position</p>
+        <h3 class="mech-step-title">Boom Luffing</h3>
+        <p class="mech-step-text">The boom lift cylinder raises or lowers the main boom to the required angle. The boom angle sensor monitors inclination continuously. The operator references the load chart to confirm safe operating conditions at the selected angle.</p>
+      </div>
+      <div class="mech-step">
+        <p class="mech-step-num">04 — Telescoping</p>
+        <h3 class="mech-step-title">Boom Extension</h3>
+        <p class="mech-step-text">Internal hydraulic cylinders extend the telescopic boom sections to the required working radius. A boom length sensor tracks extension. The load capacity rating changes with boom length — longer reach means reduced rated load.</p>
+      </div>
+      <div class="mech-step">
+        <p class="mech-step-num">05 — Load Handling</p>
+        <h3 class="mech-step-title">Lift Execution</h3>
+        <p class="mech-step-text">The load line is lowered via the hoist winch, the hook block is rigged to the load, and lifting begins. The load moment indicator continuously monitors the combination of load weight and working radius against the rated load chart.</p>
+      </div>
+      <div class="mech-step">
+        <p class="mech-step-num">06 — Monitoring</p>
+        <h3 class="mech-step-title">System Monitoring</h3>
+        <p class="mech-step-text">Throughout the operation, sensors report boom angle, boom length, load, hydraulic pressure, and outrigger status to the monitoring system. The system manages the safe working envelope and alerts the operator to approaching limits.</p>
+      </div>
+    </div>
+
+    <!-- Hydraulic flow diagram -->
+    <div class="hydraulic-block reveal reveal-delay-3">
+      <h3 class="hydraulic-title">Hydraulic Power Flow</h3>
+      <div class="hyd-flow">
+        <div class="hyd-node">
+          <div class="hyd-box active" id="hyd1">
+            <p class="hyd-box-sub">Source</p>
+            <p class="hyd-box-title">Hydraulic Power Unit</p>
+          </div>
+        </div>
+        <div class="hyd-connector">
+          <div class="hyd-arrow-wrap"><div class="hyd-arrow-flow"></div></div>
+          <div class="hyd-arrow-head"></div>
+        </div>
+        <div class="hyd-node">
+          <div class="hyd-box" id="hyd2">
+            <p class="hyd-box-sub">Distribution</p>
+            <p class="hyd-box-title">Control Valves</p>
+          </div>
+        </div>
+        <div class="hyd-connector">
+          <div class="hyd-arrow-wrap"><div class="hyd-arrow-flow"></div></div>
+          <div class="hyd-arrow-head"></div>
+        </div>
+        <div class="hyd-node">
+          <div class="hyd-box" id="hyd3">
+            <p class="hyd-box-sub">Actuation</p>
+            <p class="hyd-box-title">Hydraulic Cylinder</p>
+          </div>
+        </div>
+        <div class="hyd-connector">
+          <div class="hyd-arrow-wrap"><div class="hyd-arrow-flow"></div></div>
+          <div class="hyd-arrow-head"></div>
+        </div>
+        <div class="hyd-node">
+          <div class="hyd-box" id="hyd4">
+            <p class="hyd-box-sub">Output</p>
+            <p class="hyd-box-title">Mechanical Movement</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 07 — SENSOR & INSTRUMENTATION (Light)
+============================================================ -->
+<section id="sensors">
+  <div class="container">
+    <div class="section-eyebrow reveal"><span class="section-number dark">06 / Sensors</span></div>
+    <h2 class="sensors-heading reveal reveal-delay-1">Sensor &amp;<br>Instrumentation.</h2>
+    <p class="sensors-sub-text reveal reveal-delay-2">The sensing ecosystem that monitors crane position, load, hydraulic condition and safety state in real time.</p>
+
+    <!-- Crane sensor map -->
+    <div class="sensor-map-block reveal reveal-delay-2">
+      <!-- SVG crane silhouette with sensor dots -->
+      <svg width="360" height="300" viewBox="0 0 360 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Chassis -->
+        <rect x="40" y="206" width="220" height="28" fill="#252725" stroke="#3A3D38" stroke-width="1"/>
+        <!-- Wheels -->
+        <circle cx="72" cy="242" r="18" fill="#1C1E1C" stroke="#3A3D38" stroke-width="1.5"/>
+        <circle cx="135" cy="242" r="18" fill="#1C1E1C" stroke="#3A3D38" stroke-width="1.5"/>
+        <circle cx="198" cy="242" r="18" fill="#1C1E1C" stroke="#3A3D38" stroke-width="1.5"/>
+        <!-- Outrigger Left -->
+        <rect x="18" y="213" width="26" height="8" fill="#252725" stroke="#3A3D38" stroke-width="1"/>
+        <line x1="22" y1="221" x2="22" y2="238" stroke="#3A3D38" stroke-width="2.5"/>
+        <rect x="12" y="236" width="20" height="6" fill="#3A3D38"/>
+        <!-- Outrigger Right -->
+        <rect x="256" y="213" width="26" height="8" fill="#252725" stroke="#3A3D38" stroke-width="1"/>
+        <line x1="272" y1="221" x2="272" y2="238" stroke="#3A3D38" stroke-width="2.5"/>
+        <rect x="262" y="236" width="20" height="6" fill="#3A3D38"/>
+        <!-- Superstructure -->
+        <rect x="100" y="176" width="110" height="32" fill="#252725" stroke="#3A3D38" stroke-width="1"/>
+        <!-- Counterweight -->
+        <rect x="210" y="180" width="44" height="24" fill="#1C1E1C" stroke="#3A3D38" stroke-width="1"/>
+        <!-- Cabin -->
+        <rect x="108" y="152" width="50" height="26" fill="#252725" stroke="#3A3D38" stroke-width="1"/>
+        <!-- Main Boom line -->
+        <line x1="124" y1="152" x2="290" y2="30" stroke="#E4B51C" stroke-width="5" stroke-opacity="0.65"/>
+        <!-- Boom Lift Cylinder -->
+        <line x1="138" y1="174" x2="216" y2="92" stroke="#9A9B95" stroke-width="3" stroke-opacity="0.45"/>
+        <!-- Load line -->
+        <line x1="290" y1="32" x2="290" y2="104" stroke="#9A9B95" stroke-width="1.5" stroke-dasharray="3,3" stroke-opacity="0.5"/>
+        <!-- Hook block -->
+        <rect x="282" y="104" width="16" height="10" fill="#252725" stroke="#3A3D38" stroke-width="1"/>
+
+        <!-- SENSOR DOTS (interactive) -->
+        <circle class="svgdot" id="svgd0" cx="124" cy="152" r="6" fill="#252725" stroke="#9A9B95" stroke-width="1.5" data-si="0" style="cursor:pointer"/>
+        <circle class="svgdot" id="svgd1" cx="208" cy="88" r="6" fill="#252725" stroke="#9A9B95" stroke-width="1.5" data-si="1" style="cursor:pointer"/>
+        <circle class="svgdot" id="svgd2" cx="290" cy="110" r="6" fill="#252725" stroke="#9A9B95" stroke-width="1.5" data-si="2" style="cursor:pointer"/>
+        <circle class="svgdot" id="svgd3" cx="155" cy="192" r="6" fill="#252725" stroke="#9A9B95" stroke-width="1.5" data-si="3" style="cursor:pointer"/>
+        <circle class="svgdot" id="svgd4" cx="290" cy="32" r="6" fill="#252725" stroke="#9A9B95" stroke-width="1.5" data-si="4" style="cursor:pointer"/>
+        <circle class="svgdot" id="svgd5" cx="22" cy="216" r="6" fill="#252725" stroke="#9A9B95" stroke-width="1.5" data-si="5" style="cursor:pointer"/>
+      </svg>
+
+      <div class="sensor-legend">
+        <p class="sensor-legend-title">Sensor Locations — Click to highlight</p>
+        <div class="sl-item" onclick="highlightSensor(0)"><span class="sl-dot" id="sldot0"></span><span class="sl-name">Boom Angle Sensor</span></div>
+        <div class="sl-item" onclick="highlightSensor(1)"><span class="sl-dot" id="sldot1"></span><span class="sl-name">Boom Length Sensor</span></div>
+        <div class="sl-item" onclick="highlightSensor(2)"><span class="sl-dot" id="sldot2"></span><span class="sl-name">Load Sensor</span></div>
+        <div class="sl-item" onclick="highlightSensor(3)"><span class="sl-dot" id="sldot3"></span><span class="sl-name">Hydraulic Pressure Sensor</span></div>
+        <div class="sl-item" onclick="highlightSensor(4)"><span class="sl-dot" id="sldot4"></span><span class="sl-name">Anti-Two-Block Device</span></div>
+        <div class="sl-item" onclick="highlightSensor(5)"><span class="sl-dot" id="sldot5"></span><span class="sl-name">Outrigger Position Sensor</span></div>
+      </div>
+    </div>
+
+    <div class="sensor-grid reveal reveal-delay-2" id="sensor-grid">
+      <!-- Populated by JS -->
+    </div>
+   <section id="live-twin">
+
+  <iframe
+    src="./simulator.html"
+    title="Mobile Crane Digital Twin Simulator">
+  </iframe>
+
+</section>
+<!-- ============================================================
+     SECTION 08 — TYPES OF MOBILE CRANES (Dark)
+============================================================ -->
+<section id="types">
+  <div class="container">
+    <div class="types-top">
+      <div>
+        <div class="section-eyebrow reveal"><span class="section-number">07 / Types</span></div>
+        <h2 class="types-heading reveal reveal-delay-1">Five Crane<br>Configurations.</h2>
+      </div>
+      <span class="types-count reveal reveal-delay-2">01 – 05 / Five Types</span>
+    </div>
+  </div>
+
+  <div class="types-gallery" id="types-gallery">
+
+    <div class="type-card">
+      <!-- Replace with: <img class="type-card-img" src="assets/crane-types/all-terrain.jpg" alt="All-Terrain Crane"> -->
+      <img class="type-card-img"
+           src="assets/crane-types/all-terrain.jpg"
+           alt="All-Terrain Crane"
+           onerror="this.outerHTML='<div class=\'type-img-ph\'><svg width=\'48\' height=\'48\' viewBox=\'0 0 48 48\' fill=\'none\'><rect x=\'4\' y=\'28\' width=\'40\' height=\'14\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/><line x1=\'24\' y1=\'4\' x2=\'24\' y2=\'28\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/></svg><span class=\'type-img-ph-label\'>[ALL-TERRAIN CRANE IMAGE]</span></div>'">
+      <div class="type-card-body">
+        <p class="type-card-eyebrow">Type 01</p>
+        <h3 class="type-card-name">All-Terrain Crane</h3>
+        <div class="type-spec-row"><span class="type-spec-k">Mobility</span><span class="type-spec-v">Road &amp; Off-Road</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Typical Use</span><span class="type-spec-v">Large construction, infrastructure, industrial</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Key Advantage</span><span class="type-spec-v">Highway speed + rough terrain capability</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Capacity</span><span class="type-spec-v">Varies by model</span></div>
+      </div>
+    </div>
+
+    <div class="type-card">
+      <img class="type-card-img"
+           src="assets/crane-types/rough-terrain.jpg"
+           alt="Rough-Terrain Crane"
+           onerror="this.outerHTML='<div class=\'type-img-ph\'><svg width=\'48\' height=\'48\' viewBox=\'0 0 48 48\' fill=\'none\'><rect x=\'4\' y=\'28\' width=\'40\' height=\'14\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/><line x1=\'24\' y1=\'4\' x2=\'24\' y2=\'28\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/></svg><span class=\'type-img-ph-label\'>[ROUGH-TERRAIN CRANE IMAGE]</span></div>'">
+      <div class="type-card-body">
+        <p class="type-card-eyebrow">Type 02</p>
+        <h3 class="type-card-name">Rough-Terrain Crane</h3>
+        <div class="type-spec-row"><span class="type-spec-k">Mobility</span><span class="type-spec-v">Off-Road Only</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Typical Use</span><span class="type-spec-v">Rough terrain, quarries, remote sites</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Key Advantage</span><span class="type-spec-v">Single-engine, high off-road mobility</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Capacity</span><span class="type-spec-v">Varies by model</span></div>
+      </div>
+    </div>
+
+    <div class="type-card">
+      <img class="type-card-img"
+           src="assets/crane-types/truck-mounted.jpg"
+           alt="Truck-Mounted Crane"
+           onerror="this.outerHTML='<div class=\'type-img-ph\'><svg width=\'48\' height=\'48\' viewBox=\'0 0 48 48\' fill=\'none\'><rect x=\'4\' y=\'28\' width=\'40\' height=\'14\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/><line x1=\'24\' y1=\'4\' x2=\'24\' y2=\'28\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/></svg><span class=\'type-img-ph-label\'>[TRUCK-MOUNTED CRANE IMAGE]</span></div>'">
+      <div class="type-card-body">
+        <p class="type-card-eyebrow">Type 03</p>
+        <h3 class="type-card-name">Truck-Mounted Crane</h3>
+        <div class="type-spec-row"><span class="type-spec-k">Mobility</span><span class="type-spec-v">Road (High Speed)</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Typical Use</span><span class="type-spec-v">Urban construction, utilities, rapid deployment</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Key Advantage</span><span class="type-spec-v">Fast transport on public roads</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Capacity</span><span class="type-spec-v">Varies by model</span></div>
+      </div>
+    </div>
+
+    <div class="type-card">
+      <img class="type-card-img"
+           src="assets/crane-types/crawler.jpg"
+           alt="Crawler Crane"
+           onerror="this.outerHTML='<div class=\'type-img-ph\'><svg width=\'48\' height=\'48\' viewBox=\'0 0 48 48\' fill=\'none\'><rect x=\'4\' y=\'28\' width=\'40\' height=\'14\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/><line x1=\'24\' y1=\'4\' x2=\'24\' y2=\'28\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/></svg><span class=\'type-img-ph-label\'>[CRAWLER CRANE IMAGE]</span></div>'">
+      <div class="type-card-body">
+        <p class="type-card-eyebrow">Type 04</p>
+        <h3 class="type-card-name">Crawler Crane</h3>
+        <div class="type-spec-row"><span class="type-spec-k">Mobility</span><span class="type-spec-v">Crawler Tracks</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Typical Use</span><span class="type-spec-v">Heavy lifts, soft ground, large infrastructure</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Key Advantage</span><span class="type-spec-v">High stability, pick-and-carry, no outriggers</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Capacity</span><span class="type-spec-v">Varies by model</span></div>
+      </div>
+    </div>
+
+    <div class="type-card">
+      <img class="type-card-img"
+           src="assets/crane-types/telescopic.jpg"
+           alt="Telescopic Crane"
+           onerror="this.outerHTML='<div class=\'type-img-ph\'><svg width=\'48\' height=\'48\' viewBox=\'0 0 48 48\' fill=\'none\'><rect x=\'4\' y=\'28\' width=\'40\' height=\'14\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/><line x1=\'24\' y1=\'4\' x2=\'24\' y2=\'28\' stroke=\'#3A3D38\' stroke-width=\'1.5\'/></svg><span class=\'type-img-ph-label\'>[TELESCOPIC CRANE IMAGE]</span></div>'">
+      <div class="type-card-body">
+        <p class="type-card-eyebrow">Type 05</p>
+        <h3 class="type-card-name">Telescopic Boom Crane</h3>
+        <div class="type-spec-row"><span class="type-spec-k">Mobility</span><span class="type-spec-v">Road / Site</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Typical Use</span><span class="type-spec-v">High-reach work, tower crane assistance</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Key Advantage</span><span class="type-spec-v">Maximum reach via hydraulic telescoping</span></div>
+        <div class="type-spec-row"><span class="type-spec-k">Capacity</span><span class="type-spec-v">Varies by model</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="types-controls">
+    <button class="gallery-arrow" onclick="galleryPrev()">←</button>
+    <button class="gallery-arrow" onclick="galleryNext()">→</button>
+    <div class="gallery-dots" id="gallery-dots">
+      <div class="gallery-dot active" onclick="galleryGo(0)"></div>
+      <div class="gallery-dot" onclick="galleryGo(1)"></div>
+      <div class="gallery-dot" onclick="galleryGo(2)"></div>
+      <div class="gallery-dot" onclick="galleryGo(3)"></div>
+      <div class="gallery-dot" onclick="galleryGo(4)"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 09 — SAFETY SYSTEMS (Dark)
+============================================================ -->
+<section id="safety">
+  <div class="container">
+    <div class="section-eyebrow reveal"><span class="section-number">08 / Safety</span></div>
+    <h2 class="safety-heading reveal reveal-delay-1">Load Management &amp;<br>Safety Systems.</h2>
+    <p class="safety-sub-text reveal reveal-delay-2">Mobile crane safety is governed by a hierarchy of monitoring, limiting, and operator-awareness systems working simultaneously during every lift.</p>
+
+    <!-- Load moment chain + status bars -->
+    <div class="load-moment-wrap reveal reveal-delay-2">
+      <div>
+        <p class="lm-chain-title">Load Moment Chain</p>
+        <div class="lm-chain">
+          <div class="lm-node-box">Crane</div>
+          <div class="lm-arrow"><div class="lm-vert-line"></div></div>
+          <div class="lm-node-box">Load</div>
+          <div class="lm-arrow"><div class="lm-vert-line"></div></div>
+          <div class="lm-node-box">Load Moment</div>
+          <div class="lm-arrow"><div class="lm-vert-line"></div></div>
+          <div class="lm-node-box">Stability Check</div>
+          <div class="lm-arrow"><div class="lm-vert-line"></div></div>
+          <div class="lm-node-box">System Response</div>
+        </div>
+      </div>
+      <div>
+        <p class="status-bars-title">Operating Status Indicators</p>
+        <div class="status-item">
+          <div class="status-item-header">
+            <span class="status-item-name">Load Moment</span>
+            <span class="status-item-val ok">Normal</span>
+          </div>
+          <div class="status-track"><div class="status-fill ok" id="sf0" style="width:0%"></div></div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-header">
+            <span class="status-item-name">Boom Angle</span>
+            <span class="status-item-val ok">Normal</span>
+          </div>
+          <div class="status-track"><div class="status-fill ok" id="sf1" style="width:0%"></div></div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-header">
+            <span class="status-item-name">Load Line Tension</span>
+            <span class="status-item-val warn">Warning</span>
+          </div>
+          <div class="status-track"><div class="status-fill warn" id="sf2" style="width:0%"></div></div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-header">
+            <span class="status-item-name">Outrigger Load</span>
+            <span class="status-item-val ok">Normal</span>
+          </div>
+          <div class="status-track"><div class="status-fill ok" id="sf3" style="width:0%"></div></div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-header">
+            <span class="status-item-name">Anti-Two-Block</span>
+            <span class="status-item-val ok">Clear</span>
+          </div>
+          <div class="status-track"><div class="status-fill ok" id="sf4" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Safety cards -->
+    <div class="safety-grid reveal reveal-delay-3">
+      <div class="safety-card">
+        <div class="safety-card-icon">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect x="3" y="18" width="30" height="12" stroke="#3A6B42" stroke-width="1.5"/><line x1="18" y1="4" x2="18" y2="18" stroke="#3A6B42" stroke-width="1.5"/><polyline points="12,9 18,4 24,9" stroke="#3A6B42" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <h4 class="safety-card-title">Load Moment Indicator</h4>
+        <p class="safety-card-text">Continuously calculates the product of load weight and working radius. Warns the operator as the rated load moment is approached and can trigger protective functions at defined limits.</p>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="18" r="13" stroke="#D4881A" stroke-width="1.5"/><line x1="18" y1="7" x2="18" y2="18" stroke="#D4881A" stroke-width="1.5"/><circle cx="18" cy="23" r="1.5" fill="#D4881A"/></svg>
+        </div>
+        <h4 class="safety-card-title">Anti-Two-Block Device</h4>
+        <p class="safety-card-text">A limit switch at the boom tip detects when the hook block approaches the boom head. Activates an automatic cutout to prevent the wire rope from over-tensioning and failing catastrophically.</p>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><rect x="3" y="26" width="30" height="6" stroke="#3A6B42" stroke-width="1.5"/><rect x="6" y="20" width="8" height="6" stroke="#9A9B95" stroke-width="1"/><rect x="22" y="20" width="8" height="6" stroke="#9A9B95" stroke-width="1"/><line x1="3" y1="32" x2="3" y2="36" stroke="#3A6B42" stroke-width="1.5"/><line x1="33" y1="32" x2="33" y2="36" stroke="#3A6B42" stroke-width="1.5"/></svg>
+        </div>
+        <h4 class="safety-card-title">Outrigger Deployment</h4>
+        <p class="safety-card-text">Sensors confirm full outrigger extension and pad contact before full rated capacity is available. Operating with partial outrigger deployment significantly reduces rated load and stability margins.</p>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M18 4 L33 30 L3 30 Z" stroke="#A63228" stroke-width="1.5" fill="none"/><line x1="18" y1="13" x2="18" y2="22" stroke="#A63228" stroke-width="1.5"/><circle cx="18" cy="26" r="1.5" fill="#A63228"/></svg>
+        </div>
+        <h4 class="safety-card-title">Boom Angle &amp; Length Limits</h4>
+        <p class="safety-card-text">Minimum and maximum boom angle limits prevent structural overload and tipping. Extension limits prevent unsafe configurations. All limits are programmed from the manufacturer's rated load chart.</p>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M6 18 Q18 6 30 18 Q18 30 6 18Z" stroke="#D4881A" stroke-width="1.5" fill="none"/><line x1="18" y1="13" x2="18" y2="23" stroke="#D4881A" stroke-width="1.5" stroke-dasharray="2,2"/></svg>
+        </div>
+        <h4 class="safety-card-title">Wind &amp; Environmental Monitoring</h4>
+        <p class="safety-card-text">Anemometers measure wind speed on larger cranes. Operating limits are specified for wind conditions, as wind-induced dynamic loads on the boom and suspended load are critical safety factors.</p>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon">
+          <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><circle cx="18" cy="12" r="6" stroke="#3A6B42" stroke-width="1.5"/><path d="M8 34 Q8 22 18 22 Q28 22 28 34" stroke="#3A6B42" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <h4 class="safety-card-title">Operator Awareness Systems</h4>
+        <p class="safety-card-text">Modern cranes provide a comprehensive display of machine status, load chart compliance, rated capacity and proximity to operating limits through the crane's integrated monitoring and display system.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SECTION 10 — MARKET / INDUSTRY (Light)
+============================================================ -->
+<section id="industry">
+  <div class="container">
+    <div class="section-eyebrow reveal"><span class="section-number dark">09 / Industry</span></div>
+    <h2 class="industry-heading reveal reveal-delay-1">Global Mobile Crane<br>Industry.</h2>
+    <p class="industry-sub-text reveal reveal-delay-2">The mobile crane market is a global industrial sector serving construction, energy, infrastructure and industrial applications across every major region.</p>
+
+    <!-- Stats row -->
+    <div class="industry-stats reveal reveal-delay-2">
+      <div class="stat-cell">
+        <p class="stat-label">Global Market Size (2024)</p>
+        <p class="stat-value">$17.4 B</p>
+        <p class="stat-note">USD 17.41 Billion — Market Research Future, 2024</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-label">Projected CAGR (2025–2035)</p>
+        <p class="stat-value">6.05%</p>
+        <p class="stat-note">Compound Annual Growth Rate through 2031 — TechSci Research</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-label">Forecast Market Size (2033)</p>
+        <p class="stat-value">$31.2 B</p>
+        <p class="stat-note">Projected value by 2033 at 6.6% CAGR — Grand View Research</p>
+      </div>
+      <div class="stat-cell">
+        <p class="stat-label">Key Growth Driver</p>
+        <p class="stat-value">+16%</p>
+        <p class="stat-note">Growth in private infrastructure participation in 2024 vs. 2023 — GMI</p>
+      </div>
+    </div>
+
+    <!-- Bar chart -->
+    <div class="bar-chart-block reveal reveal-delay-2">
+      <p class="bar-chart-title">Regional Market Share — Estimated Distribution (2024)</p>
+      <div id="bar-chart">
+        <div class="bar-row"><span class="bar-label">Asia Pacific</span><div class="bar-track"><div class="bar-fill" data-w="0.42"></div></div><span class="bar-val">~42%</span></div>
+        <div class="bar-row"><span class="bar-label">Europe</span><div class="bar-track"><div class="bar-fill" data-w="0.25"></div></div><span class="bar-val">~25%</span></div>
+        <div class="bar-row"><span class="bar-label">North America</span><div class="bar-track"><div class="bar-fill" data-w="0.20"></div></div><span class="bar-val">~20%</span></div>
+        <div class="bar-row"><span class="bar-label">Middle East & Africa</span><div class="bar-track"><div class="bar-fill" data-w="0.08"></div></div><span class="bar-val">~8%</span></div>
+        <div class="bar-row"><span class="bar-label">Rest of World</span><div class="bar-track"><div class="bar-fill" data-w="0.05"></div></div><span class="bar-val">~5%</span></div>
+      </div>
+    </div>
+
+    <!-- Two-col: manufacturers + trends -->
+    <div class="industry-cols reveal reveal-delay-3">
+      <div>
+        <p class="industry-col-title">Major Manufacturers</p>
+        <div class="mfg-item"><span class="mfg-num">01</span><span class="mfg-name">Liebherr</span><span class="mfg-country">Germany</span></div>
+        <div class="mfg-item"><span class="mfg-num">02</span><span class="mfg-name">Tadano</span><span class="mfg-country">Japan</span></div>
+        <div class="mfg-item"><span class="mfg-num">03</span><span class="mfg-name">Manitowoc / Grove</span><span class="mfg-country">USA</span></div>
+        <div class="mfg-item"><span class="mfg-num">04</span><span class="mfg-name">Terex</span><span class="mfg-country">USA</span></div>
+        <div class="mfg-item"><span class="mfg-num">05</span><span class="mfg-name">XCMG</span><span class="mfg-country">China</span></div>
+        <div class="mfg-item"><span class="mfg-num">06</span><span class="mfg-name">Sany</span><span class="mfg-country">China</span></div>
+        <div class="mfg-item"><span class="mfg-num">07</span><span class="mfg-name">Zoomlion</span><span class="mfg-country">China</span></div>
+      </div>
+      <div>
+        <p class="industry-col-title">Industry Trends</p>
+        <div class="trend-item"><span class="trend-num">01</span><div><p class="trend-name">Electrification of Crane Powertrains</p><p class="trend-desc">Hybrid and fully electric mobile crane variants are entering the market, targeting emissions regulations and operational cost reduction in urban environments.</p></div></div>
+        <div class="trend-item"><span class="trend-num">02</span><div><p class="trend-name">Digital Load Management Systems</p><p class="trend-desc">Advanced LMIs with real-time load chart processing, automatic working envelope management, and operator-assist functions are becoming standard.</p></div></div>
+        <div class="trend-item"><span class="trend-num">03</span><div><p class="trend-name">Remote Monitoring &amp; Telematics</p><p class="trend-desc">Fleet management platforms connect cranes to central monitoring systems for utilization data, maintenance scheduling, and operational analytics.</p></div></div>
+        <div class="trend-item"><span class="trend-num">04</span><div><p class="trend-name">Stricter Global Safety Regulations</p><p class="trend-desc">Evolving standards in major markets are increasing requirements for automatic safety systems, operator certification, and machine inspection intervals.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     FOOTER
+============================================================ -->
+<footer id="footer">
+  <div class="footer-top">
+    <div class="footer-brand">
+      <p class="footer-brand-name">Mobile Crane<br>Digital Experience</p>
+      <p class="footer-brand-desc">An interactive engineering visualization exploring the mechanics, components and technology of the mobile crane.</p>
+    </div>
+    <nav class="footer-nav">
+      <a href="#machine">01 Machine</a>
+      <a href="#anatomy">02 Anatomy</a>
+      <a href="#components">03 Components</a>
+      <a href="#mechanics">04 Mechanics</a>
+      <a href="#sensors">05 Sensors</a>
+      <a href="#types">06 Types</a>
+      <a href="#safety">07 Safety</a>
+      <a href="#industry">08 Industry</a>
+    </nav>
+  </div>
+  <div class="footer-bottom">
+    <span class="footer-copy">Mobile Crane Digital Experience — Engineering Visualization</span>
+    <span class="footer-copy">Three.js · HTML5 · CSS3</span>
+  </div>
+</footer>
+
+<!-- ============================================================
+     JAVASCRIPT
+============================================================ -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+/* ──────────────────────────────────────────────
+   DATA LAYER
+────────────────────────────────────────────── */
+const COMP_DATA = [
+  { id:'chassis',       group:'CHASSIS & BASE',         gi:'01', name:'Chassis',
+    fn:'The primary structural frame of the carrier vehicle. Provides the mounting platform for the crane superstructure, outrigger systems, axles, wheels and drive components.',
+    role:'Bears the total weight of the crane and its load during travel and operation. Engineered for the torsional and bending stresses of both road travel and crane operation.',
+    sys:['Drive System','Outrigger System','Slewing Ring','Axles & Wheels'], sensors:['Axle Load Sensors','Inclination Sensor'] },
+  { id:'wheels',        group:'CHASSIS & BASE',         gi:'01', name:'Wheels & Tires',
+    fn:'Multi-axle road wheels that allow the crane to travel under its own power. Typically large-duty tires rated for the crane gross vehicle weight.',
+    role:'Transfer crane weight to the road surface during travel. During lifting with outriggers deployed, wheels are relieved of the crane\'s operating load.',
+    sys:['Drive Axles','Steering System','Suspension'], sensors:['Tire Pressure (if equipped)'] },
+  { id:'outrigger-beam',group:'OUTRIGGER ASSEMBLY',     gi:'02', name:'Outrigger Beam',
+    fn:'Horizontal structural beam extending laterally from the crane chassis. Provides the extended base support required during lifting operations.',
+    role:'Extends the effective footprint far beyond the wheel track, greatly increasing stability. Transmits tipping forces from the superstructure to the outrigger pads.',
+    sys:['Outrigger Hydraulic Cylinder','Outrigger Pad','Hydraulic System'], sensors:['Outrigger Extension Sensor'] },
+  { id:'cabin',         group:'CABIN & COUNTERWEIGHT',  gi:'03', name:'Operator Cabin',
+    fn:'Enclosed workspace for the crane operator. Contains all controls, instrumentation and displays required for crane operation.',
+    role:'Provides full control of all crane functions: slewing, boom hoisting, telescoping, load line hoisting and safety system monitoring. Requires clear sightlines and ergonomic controls.',
+    sys:['Control System','Load Moment Indicator','Engine Controls','Hydraulic Controls'], sensors:['All crane sensors feed displays in cabin'] },
+  { id:'counterweight', group:'CABIN & COUNTERWEIGHT',  gi:'03', name:'Counterweight',
+    fn:'Heavy mass attached to the rear of the crane superstructure to balance the tipping moment created by the boom and suspended load.',
+    role:'Without counterweight the crane would tip forward during lifting. The counterweight creates an opposing stabilizing moment. Configuration must be verified against the load chart.',
+    sys:['Superstructure','Slewing System'], sensors:['—'] },
+  { id:'boom-cyl',      group:'BOOM ASSEMBLY',          gi:'04', name:'Boom Lift Cylinder',
+    fn:'Large hydraulic cylinder connecting the superstructure to the main boom. Controls the luffing angle of the boom.',
+    role:'Raises and lowers the main boom angle. Must resist the full bending moment created by the boom weight plus the load at the boom tip. A critical structural and hydraulic component.',
+    sys:['Hydraulic System','Main Boom','Control System'], sensors:['Hydraulic Pressure Sensor','Boom Angle Sensor'] },
+  { id:'main-boom',     group:'BOOM ASSEMBLY',          gi:'04', name:'Main Boom',
+    fn:'Primary structural member responsible for lifting and positioning the load. Provides the horizontal reach required for pick-and-carry and fixed-point lifting operations.',
+    role:'Transfers lifting forces from the hydraulic system to the load line and hook block. Boom angle and length define the working radius and rated capacity. Must withstand bending, compression and torsion.',
+    sys:['Boom Lift Cylinder','Telescopic Sections','Boom Head','Load Line'], sensors:['Boom Angle Sensor','Boom Length Sensor'] },
+  { id:'tele-sections', group:'BOOM ASSEMBLY',          gi:'04', name:'Telescopic Boom Sections',
+    fn:'Nested hydraulic-powered boom sections that extend from inside the main boom to increase the crane\'s working radius.',
+    role:'Allow boom length — and therefore working radius — to be varied hydraulically without dismantling. Each section is precision-machined and slides within the section below it.',
+    sys:['Hydraulic System','Main Boom','Boom Length Sensor'], sensors:['Boom Length Sensor'] },
+  { id:'load-line',     group:'RIGGING & HOOK BLOCK',   gi:'05', name:'Main Load Line',
+    fn:'Wire rope running from the hoist winch over the boom head sheaves to the hook block. The primary tension member transferring lifting force to the load.',
+    role:'Supports the entire suspended load. Rope selection, condition and reeving configuration are critical to safe operation. The number of rope parts determines lifting capacity and speed.',
+    sys:['Hoist Winch','Boom Head Sheaves','Hook Block'], sensors:['Load Sensor (via hook block)','Anti-Two-Block Device'] },
+  { id:'a2b',           group:'RIGGING & HOOK BLOCK',   gi:'05', name:'Anti-Two-Block Device',
+    fn:'Limit switch mechanism at the boom tip that detects when the hook block approaches the boom head to an unsafe proximity.',
+    role:'Prevents the catastrophic failure mode of two-blocking, where hook contact with the boom head under tension causes wire rope failure. Triggers automatic stop of hoisting and boom movement.',
+    sys:['Hook Block','Load Line','Safety Control System'], sensors:['Anti-Two-Block Limit Switch'] },
+  { id:'hook-block',    group:'RIGGING & HOOK BLOCK',   gi:'05', name:'Main Hook Block',
+    fn:'Lower load-carrying assembly comprising multiple sheaves, a hook and a latch. The connection point between the crane and its load.',
+    role:'Receives and distributes load line tension across multiple rope parts, amplifying the lifting force. The hook connects to the rigging on the load. Hook rated capacity must not be exceeded.',
+    sys:['Main Load Line','Rigging','Load Sensor'], sensors:['Load Pin Sensor','Anti-Two-Block Device'] }
+];
+
+const SENSOR_DATA = [
+  { name:'Boom Angle Sensor',          measure:'Boom inclination angle',
+    loc:'Boom base / superstructure',  purpose:'Provides real-time boom angle data to the load moment indicator for working radius calculation and safe envelope management.',
+    safety:'Critical input for load chart compliance and boom angle limit functions.', icon:'angle' },
+  { name:'Boom Length Sensor',          measure:'Boom extension / total length',
+    loc:'Boom assembly (cable transducer)', purpose:'Tracks extension of each telescopic section to determine actual boom length — combined with angle to calculate working radius.',
+    safety:'Essential for accurate load chart lookup and working radius determination.', icon:'length' },
+  { name:'Load Sensor',                 measure:'Suspended load weight',
+    loc:'Hook block assembly or boom head', purpose:'Provides actual load weight measurement to the load moment indicator for comparison against rated capacity at the current radius.',
+    safety:'Core input for load moment calculation and overload protection.', icon:'load' },
+  { name:'Hydraulic Pressure Sensor',  measure:'Hydraulic circuit pressure',
+    loc:'Boom lift, telescoping, and hoist circuits', purpose:'Monitors hydraulic pressure to detect overloading, leakage or system faults. Used in load measurement systems for pressure-to-load conversion.',
+    safety:'Pressure relief valves act in conjunction with sensors for overload protection.', icon:'pressure' },
+  { name:'Anti-Two-Block Device',       measure:'Hook-to-boom-head proximity',
+    loc:'Boom tip / boom head assembly', purpose:'Detects when hook block rises to unsafe proximity to boom head. Triggers automatic cutout of hoist-up and boom-down functions.',
+    safety:'Direct active safety function — prevents catastrophic wire rope failure.', icon:'a2b' },
+  { name:'Outrigger Position Sensor',  measure:'Outrigger extension state',
+    loc:'Outrigger beam and cylinder',  purpose:'Confirms outrigger deployment status so the LMI uses the correct rated capacity table for the actual outrigger configuration.',
+    safety:'Prevents full-outrigger-rated operation when outriggers are not fully deployed.', icon:'outrigger' },
+  { name:'Engine Temperature Monitor', measure:'Engine / coolant temperature',
+    loc:'Engine compartment',           purpose:'Monitors engine thermal condition to prevent overheating during high-demand operations. Triggers warnings or shutdowns at limit temperatures.',
+    safety:'Prevents engine damage and ensures continued safe power supply to hydraulics.', icon:'temp' },
+  { name:'Wind Speed Sensor',          measure:'Ambient wind speed',
+    loc:'Boom tip or superstructure',   purpose:'Provides wind speed data to the operator and monitoring system. High wind significantly increases dynamic loads on boom and suspended load.',
+    safety:'Ensures operation within manufacturer\'s stated wind speed limits.', icon:'wind' }
+];
+
+/* ──────────────────────────────────────────────
+   SENSOR ICONS (SVG)
+────────────────────────────────────────────── */
+function sensorIcon(type) {
+  const s = '#E4B51C', g = '#5C5E5A';
+  const m = {
+    angle:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="38" r="16" stroke="${s}" stroke-width="1.5"/><line x1="28" y1="38" x2="28" y2="22" stroke="${s}" stroke-width="1.5"/><line x1="28" y1="38" x2="42" y2="38" stroke="${g}" stroke-width="1.5"/><path d="M40 31 A12 12 0 0 1 28 38" stroke="${s}" stroke-width="1.5" fill="none"/></svg>`,
+    length:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><line x1="8" y1="28" x2="48" y2="28" stroke="${s}" stroke-width="1.5"/><line x1="8" y1="22" x2="8" y2="34" stroke="${s}" stroke-width="1.5"/><line x1="48" y1="22" x2="48" y2="34" stroke="${s}" stroke-width="1.5"/><circle cx="18" cy="28" r="3" fill="${s}"/><circle cx="38" cy="28" r="3" fill="${s}"/></svg>`,
+    load:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><rect x="19" y="32" width="18" height="14" stroke="${s}" stroke-width="1.5"/><line x1="28" y1="10" x2="28" y2="32" stroke="${s}" stroke-width="1.5"/><path d="M21 16 L28 10 L35 16" stroke="${s}" stroke-width="1.5" fill="none"/><line x1="12" y1="10" x2="44" y2="10" stroke="${g}" stroke-width="1.5"/></svg>`,
+    pressure:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="18" stroke="${s}" stroke-width="1.5"/><line x1="28" y1="13" x2="28" y2="21" stroke="${s}" stroke-width="1.5"/><line x1="28" y1="28" x2="40" y2="21" stroke="${s}" stroke-width="1.5"/><circle cx="28" cy="28" r="2.5" fill="${s}"/></svg>`,
+    a2b:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><rect x="18" y="36" width="20" height="10" stroke="${s}" stroke-width="1.5"/><line x1="28" y1="10" x2="28" y2="36" stroke="${g}" stroke-width="1.5" stroke-dasharray="3,3"/><line x1="14" y1="20" x2="42" y2="20" stroke="${s}" stroke-width="1.5"/><path d="M21 26 L28 20 L35 26" stroke="${s}" stroke-width="1.5" fill="none"/></svg>`,
+    outrigger:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><rect x="18" y="24" width="20" height="10" stroke="${s}" stroke-width="1.5"/><rect x="4" y="24" width="14" height="8" stroke="${g}" stroke-width="1.5"/><rect x="38" y="24" width="14" height="8" stroke="${g}" stroke-width="1.5"/><line x1="8" y1="32" x2="8" y2="44" stroke="${s}" stroke-width="1.5"/><line x1="48" y1="32" x2="48" y2="44" stroke="${s}" stroke-width="1.5"/><rect x="2" y="44" width="12" height="4" stroke="${s}" stroke-width="1.5"/><rect x="42" y="44" width="12" height="4" stroke="${s}" stroke-width="1.5"/></svg>`,
+    temp:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="44" r="7" stroke="${s}" stroke-width="1.5"/><rect x="25.5" y="14" width="5" height="32" rx="2.5" stroke="${s}" stroke-width="1.5"/><line x1="33" y1="20" x2="38" y2="20" stroke="${g}" stroke-width="1.5"/><line x1="33" y1="28" x2="38" y2="28" stroke="${g}" stroke-width="1.5"/><line x1="33" y1="36" x2="38" y2="36" stroke="${g}" stroke-width="1.5"/></svg>`,
+    wind:`<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><path d="M8 24 Q20 16 32 24 Q44 32 56 24" stroke="${s}" stroke-width="1.5" fill="none" transform="translate(-4,0)"/><path d="M8 34 Q20 26 32 34 Q44 42 56 34" stroke="${g}" stroke-width="1.5" fill="none" transform="translate(-4,0)"/><circle cx="8" cy="24" r="2.5" fill="${s}"/></svg>`
+  };
+  return m[type] || m.angle;
+}
+
+/* ──────────────────────────────────────────────
+   COMPONENT IMAGE MAP
+────────────────────────────────────────────── */
+const COMP_IMG = {
+  'chassis': 'chasis.png',
+  'wheels': 'wheels&tires.png',
+  'ladder': 'chasis.png', // Fallback
+  'outrigger-beam': 'outrigger_beam.png',
+  'outrigger-cyl': 'outrigger_beam.png', // Fallback
+  'outrigger-pad': 'outrigger_beam.png', // Fallback
+  'cabin': 'cabin.png',
+  'counterweight': 'counter_weight.png',
+  'boom-cyl': 'boom_lift_cylinder.png',
+  'main-boom': 'main_boom.png',
+  'tele-sections': 'telescopic_boom.png',
+  'load-line': 'main_load_line.png',
+  'a2b': 'anti_two_block_device.png',
+  'hook-block': 'main_hook.png'
+};
+
+/* ──────────────────────────────────────────────
+   THREE.JS SCENE BUILDER
+────────────────────────────────────────────── */
+const Y_COL = 0xE4B51C, Y_DIM = 0xB8920F, GREY = 0x3A3D38, METAL = 0x5C5E5A,
+      DARK  = 0x252725,  BLACK = 0x111211,  TYRECOL = 0x141414;
+
+function mkMat(color, rough=0.6, metal=0.25) {
+  return new THREE.MeshStandardMaterial({ color, roughness:rough, metalness:metal });
+}
+
+function buildCrane(scene, opts={}) {
+  const root = new THREE.Group();
+  const yM   = mkMat(Y_COL, 0.55, 0.25);
+  const yD   = mkMat(Y_DIM, 0.58, 0.22);
+  const gM   = mkMat(GREY,  0.65, 0.30);
+  const mM   = mkMat(METAL, 0.45, 0.65);
+  const dM   = mkMat(DARK,  0.70, 0.25);
+  const bk   = mkMat(TYRECOL,0.90, 0.00);
+  const parts = {};
+
+  // Ground & grid
+  if (opts.ground !== false) {
+    const gr = new THREE.Mesh(new THREE.CircleGeometry(10,64), mkMat(0x131413,1.0,0.0));
+    gr.rotation.x=-Math.PI/2; gr.receiveShadow=true; root.add(gr);
+    root.add(new THREE.GridHelper(18,36,0x1E201E,0x191B19));
+  }
+
+  // CHASSIS
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(5.4,0.5,1.9), yM.clone());
+  ch.position.set(0,0.5,0); ch.castShadow=true;
+  ch.userData={id:'chassis',group:'chassis'}; root.add(ch); parts.chassis=ch;
+
+  // WHEELS
+  function mkWheel(x,z){ const wg=new THREE.Group(); const ti=new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,.3,20),bk.clone()); ti.rotation.x=Math.PI/2; const ri=new THREE.Mesh(new THREE.CylinderGeometry(.24,.24,.28,16),mM.clone()); ri.rotation.x=Math.PI/2; wg.add(ti,ri); wg.position.set(x,.38,z); wg.userData={id:'wheels',group:'chassis'}; return wg; }
+  const wGrp=new THREE.Group();
+  [[-1.7,1.15],[-1.7,-1.15],[0,1.15],[0,-1.15],[1.7,1.15],[1.7,-1.15]].forEach(([x,z])=>wGrp.add(mkWheel(x,z)));
+  root.add(wGrp); parts.wheels=wGrp;
+
+  // OUTRIGGERS
+  function mkOut(side){ const og=new THREE.Group();
+    const beam=new THREE.Mesh(new THREE.BoxGeometry(1.8,.18,.18),yM.clone()); beam.position.set(side*2.0,.5,0); beam.userData={id:'outrigger-beam',group:'outrigger'};
+    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,.6,10),mM.clone()); cyl.position.set(side*2.75,.22,0); cyl.userData={id:'outrigger-cyl',group:'outrigger'};
+    const pad=new THREE.Mesh(new THREE.BoxGeometry(.48,.06,.48),dM.clone()); pad.position.set(side*2.75,-.1,0); pad.receiveShadow=true; pad.userData={id:'outrigger-pad',group:'outrigger'};
+    og.add(beam,cyl,pad); return og; }
+  const oL=mkOut(-1), oR=mkOut(1); root.add(oL,oR); parts.outriggers=[oL,oR];
+
+  // SUPERSTRUCTURE
+  const ss=new THREE.Mesh(new THREE.BoxGeometry(2.5,.72,1.7),yM.clone()); ss.position.set(0,1.06,0); ss.castShadow=true; ss.userData={id:'chassis',group:'chassis'}; root.add(ss);
+
+  // COUNTERWEIGHT
+  const cw=new THREE.Mesh(new THREE.BoxGeometry(1.1,.95,1.6),dM.clone()); cw.position.set(1.6,1.25,0); cw.castShadow=true; cw.userData={id:'counterweight',group:'cabin'}; root.add(cw); parts.counterweight=cw;
+
+  // CABIN
+  const cab=new THREE.Mesh(new THREE.BoxGeometry(.95,.86,.96),gM.clone()); cab.position.set(-0.4,1.9,0); cab.castShadow=true; cab.userData={id:'cabin',group:'cabin'}; root.add(cab); parts.cabin=cab;
+  const win=new THREE.MeshStandardMaterial({color:0x2A4A60,roughness:.1,metalness:.6,transparent:true,opacity:.55});
+  const wf=new THREE.Mesh(new THREE.PlaneGeometry(.65,.38),win); wf.position.set(-0.88,1.96,0); wf.rotation.y=Math.PI/2; root.add(wf);
+
+  // BOOM LIFT CYLINDER
+  const bc=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,3.0,10),mM.clone()); bc.position.set(-.52,2.1,0); bc.rotation.z=-Math.PI/4.4; bc.castShadow=true; bc.userData={id:'boom-cyl',group:'boom'}; root.add(bc); parts.boomCyl=bc;
+
+  // BOOM GROUP
+  const bg=new THREE.Group(); bg.position.set(-.85,1.6,0); bg.rotation.z=Math.PI/5.5;
+
+  const b1=new THREE.Mesh(new THREE.BoxGeometry(3.3,.4,.4),yM.clone()); b1.position.set(1.65,0,0); b1.castShadow=true; b1.userData={id:'main-boom',group:'boom'}; bg.add(b1);
+  const b2=new THREE.Mesh(new THREE.BoxGeometry(2.7,.32,.32),yD.clone()); b2.position.set(4.45,0,0); b2.castShadow=true; b2.userData={id:'tele-sections',group:'boom'}; bg.add(b2);
+  const b3=new THREE.Mesh(new THREE.BoxGeometry(2.3,.24,.24),yM.clone()); b3.position.set(6.7,0,0); b3.castShadow=true; b3.userData={id:'tele-sections',group:'boom'}; bg.add(b3);
+  const bh=new THREE.Mesh(new THREE.BoxGeometry(.16,.38,.38),mM.clone()); bh.position.set(7.92,0,0); bh.userData={id:'main-boom',group:'boom'}; bg.add(bh);
+  const sh=new THREE.Mesh(new THREE.CylinderGeometry(.11,.11,.14,16),mM.clone()); sh.rotation.z=Math.PI/2; sh.position.set(7.92,0,0); bg.add(sh);
+  const a2bM=new THREE.Mesh(new THREE.SphereGeometry(.08,8,8),mkMat(0xD4881A,.5,.4)); a2bM.position.set(7.82,.14,0); a2bM.userData={id:'a2b',group:'rigging'}; bg.add(a2bM);
+  const llPts=[new THREE.Vector3(7.92,0,0),new THREE.Vector3(7.92,-2.4,0)];
+  const ll=new THREE.Line(new THREE.BufferGeometry().setFromPoints(llPts),new THREE.LineBasicMaterial({color:0x9A9B95})); ll.userData={id:'load-line',group:'rigging'}; bg.add(ll);
+  const hb=new THREE.Mesh(new THREE.BoxGeometry(.28,.22,.22),mM.clone()); hb.position.set(7.92,-2.62,0); hb.castShadow=true; hb.userData={id:'hook-block',group:'rigging'}; bg.add(hb);
+  const hkC=new THREE.QuadraticBezierCurve3(new THREE.Vector3(7.92,-2.72,0),new THREE.Vector3(8.04,-2.9,0),new THREE.Vector3(7.92,-2.95,0));
+  const hkL=new THREE.Line(new THREE.BufferGeometry().setFromPoints(hkC.getPoints(14)),new THREE.LineBasicMaterial({color:0x9A9B95})); bg.add(hkL);
+  root.add(bg); parts.boom=bg;
+
+  // Access ladder
+  const lad=new THREE.Mesh(new THREE.BoxGeometry(.08,1.2,.5),gM.clone()); lad.position.set(-0.94,1.24,0); lad.userData={id:'ladder',group:'chassis'}; root.add(lad); parts.ladder=lad;
+
+  root.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.receiveShadow=true;} });
+  scene.add(root);
+  return {root, parts};
+}
+
+function setupLights(scene) {
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+  const key=new THREE.DirectionalLight(0xFFF8EE, 2.5); 
+  key.position.set(10,15,10); 
+  key.castShadow=true; 
+  key.shadow.camera.near=1; 
+  key.shadow.camera.far=50; 
+  key.shadow.camera.left=-15; 
+  key.shadow.camera.right=15; 
+  key.shadow.camera.top=15; 
+  key.shadow.camera.bottom=-15; 
+  key.shadow.mapSize.set(2048,2048); 
+  scene.add(key);
+  const fill=new THREE.DirectionalLight(0xF1F0E9, 1.0); fill.position.set(-5,5,-5); scene.add(fill);
+}
+
+function mkRenderer(canvas, opts={}) {
+  const r=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,...opts});
+  r.setPixelRatio(Math.min(devicePixelRatio,2));
+  r.shadowMap.enabled=true; r.shadowMap.type=THREE.PCFSoftShadowMap;
+  r.outputColorSpace=THREE.SRGBColorSpace;
+  r.toneMapping=THREE.ACESFilmicToneMapping; r.toneMappingExposure=1.1;
+  return r;
+}
+
+function easeInOut(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+/* ──────────────────────────────────────────────
+   SCENE 1 — HERO
+────────────────────────────────────────────── */
+(function(){
+  const canvas=document.getElementById('hero-canvas');
+  const container=document.getElementById('hero-right');
+  const renderer=mkRenderer(canvas,{alpha:false});
+  renderer.setClearColor(0x111211);
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x111211);
+  scene.fog=new THREE.Fog(0x111211,20,36);
+  const camera=new THREE.PerspectiveCamera(42,1,.1,200);
+  camera.position.set(25, 15, 25); camera.lookAt(0,2,0);
+  setupLights(scene);
+
+  const loader = new GLTFLoader();
+  loader.load('assets/3D_model/mobile_crane.glb', function(gltf) {
+    const model = gltf.scene;
+    // Center and scale the model automatically
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 12 / maxDim; // Scale to a reasonable size
+    model.scale.setScalar(scale);
+    model.position.sub(center.multiplyScalar(scale));
+    // Move up so it sits on the ground
+    model.position.y += (size.y * scale) / 2;
+    
+    model.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+    scene.add(model);
+  });
+
+  const controls=new OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true; controls.dampingFactor=.06;
+  controls.autoRotate=true; controls.autoRotateSpeed=.55;
+  controls.enablePan=false; controls.minDistance=5; controls.maxDistance=20;
+  controls.maxPolarAngle=Math.PI*.57; controls.target.set(0,2,0);
+
+  function resize(){
+    const w=container.clientWidth, h=container.clientHeight;
+    renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix();
+  }
+  resize(); window.addEventListener('resize',resize);
+
+  // Control buttons
+  document.getElementById('btn-rotate').addEventListener('click',()=>{
+    controls.autoRotate=!controls.autoRotate;
+    document.getElementById('btn-rotate').textContent=controls.autoRotate?'⟳ Rotate':'⏸ Pause';
+  });
+  document.getElementById('btn-reset').addEventListener('click',()=>{
+    camera.position.set(7.5,4.5,8.5); controls.target.set(0,2,0);
+  });
+
+  (function animate(){requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera);})();
+})();
+
+/* ──────────────────────────────────────────────
+   SCENE 2 — ANATOMY
+────────────────────────────────────────────── */
+let anatRenderer, anatScene, anatCamera, anatControls, anatMeshes=[], selectedMesh=null;
+
+(function(){
+  const canvas=document.getElementById('anatomy-canvas');
+  const container=canvas.parentElement;
+  anatRenderer=mkRenderer(canvas);
+  anatScene=new THREE.Scene(); anatScene.background=new THREE.Color(0x181A18);
+  anatCamera=new THREE.PerspectiveCamera(44,1,.1,100);
+  anatCamera.position.set(7.5,4.5,7.5); anatCamera.lookAt(0,2.2,0);
+  setupLights(anatScene);
+  const {root:cr}=buildCrane(anatScene,{ground:true});
+
+  anatControls=new OrbitControls(anatCamera,canvas);
+  anatControls.enableDamping=true; anatControls.dampingFactor=.08;
+  anatControls.minDistance=4; anatControls.maxDistance=22;
+  anatControls.maxPolarAngle=Math.PI*.58; anatControls.target.set(0,2,0);
+
+  cr.traverse(o=>{ if(o.isMesh&&o.userData.id){ o._baseColor=o.material.color.clone(); anatMeshes.push(o); } });
+
+  const tip=document.getElementById('crane-tooltip');
+  const raycaster=new THREE.Raycaster();
+  const mouse=new THREE.Vector2();
+  let hovMesh=null;
+
+  canvas.addEventListener('mousemove',e=>{
+    const r=container.getBoundingClientRect();
+    mouse.x=((e.clientX-r.left)/r.width)*2-1;
+    mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+    raycaster.setFromCamera(mouse,anatCamera);
+    const hits=raycaster.intersectObjects(anatMeshes);
+    if(hovMesh&&hovMesh!==selectedMesh){hovMesh.material.emissive.setHex(0);hovMesh.material.emissiveIntensity=0;}
+    hovMesh=null;
+    if(hits.length){
+      hovMesh=hits[0].object;
+      if(hovMesh!==selectedMesh){hovMesh.material.emissive.setHex(0xE4B51C);hovMesh.material.emissiveIntensity=.22;}
+      canvas.style.cursor='crosshair';
+      const c=COMP_DATA.find(c=>c.id===hovMesh.userData.id);
+      if(c){tip.textContent=c.name;tip.style.opacity='1';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-8)+'px';}
+    } else { canvas.style.cursor='default'; tip.style.opacity='0'; }
+  });
+
+  canvas.addEventListener('mouseleave',()=>{ tip.style.opacity='0'; });
+
+  canvas.addEventListener('click',e=>{
+    if(!hovMesh)return;
+    if(selectedMesh&&selectedMesh!==hovMesh){selectedMesh.material.emissive.setHex(0);selectedMesh.material.emissiveIntensity=0;}
+    selectedMesh=hovMesh;
+    selectedMesh.material.emissive.setHex(0xE4B51C);
+    selectedMesh.material.emissiveIntensity=.35;
+    const c=COMP_DATA.find(c=>c.id===selectedMesh.userData.id);
+    if(c) openPanel(c);
+  });
+
+  window.filterGroup=function(gid,btn){
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    anatMeshes.forEach(m=>{
+      const inGroup=gid==='all'||m.userData.group===gid;
+      m.material.opacity=inGroup?1:.14;
+      m.material.transparent=!inGroup;
+    });
+  };
+
+  function resize(){
+    const w=container.clientWidth, h=container.clientHeight;
+    anatRenderer.setSize(w,h); anatCamera.aspect=w/h; anatCamera.updateProjectionMatrix();
+  }
+  resize(); window.addEventListener('resize',resize);
+
+  (function animate(){requestAnimationFrame(animate); anatControls.update(); anatRenderer.render(anatScene,anatCamera);})();
+})();
+
+function openPanel(comp){
+  document.getElementById('panel-group').textContent=comp.gi+' / '+comp.group;
+  document.getElementById('panel-name').textContent=comp.name;
+  document.getElementById('panel-function').textContent=comp.fn;
+  document.getElementById('panel-role').textContent=comp.role;
+  document.getElementById('panel-systems').innerHTML=comp.sys.map(s=>`<span class="panel-tag">${s}</span>`).join('');
+  document.getElementById('panel-sensors').innerHTML=comp.sensors.map(s=>`<span class="panel-tag">${s}</span>`).join('');
+  document.getElementById('comp-panel').classList.add('open');
+}
+window.closePanel=function(){
+  document.getElementById('comp-panel').classList.remove('open');
+  if(selectedMesh){selectedMesh.material.emissive.setHex(0);selectedMesh.material.emissiveIntensity=0;selectedMesh=null;}
+};
+
+
+
+/* ──────────────────────────────────────────────
+   COMPONENT INTELLIGENCE SECTION
+────────────────────────────────────────────── */
+let compIdx=0;
+
+function renderComp(i){
+  compIdx=i;
+  const c=COMP_DATA[i];
+  document.getElementById('ci-eyebrow').textContent=c.gi+' / '+c.group;
+  document.getElementById('ci-name').textContent=c.name;
+  document.getElementById('ci-function').textContent=c.fn;
+  document.getElementById('ci-role').textContent=c.role;
+  document.getElementById('ci-systems').innerHTML=c.sys.map(s=>`<span class="ci-tag">${s}</span>`).join('');
+  document.getElementById('ci-params').innerHTML=c.sensors.map(s=>`<span class="ci-tag">${s}</span>`).join('');
+  document.getElementById('comp-indicator').textContent=(i+1)+' / '+COMP_DATA.length;
+  
+  const imgName = COMP_IMG[c.id];
+  document.getElementById('comp-img').src = imgName ? 'assets/components/' + imgName : 'assets/components/chasis.png';
+}
+window.prevComp=()=>renderComp((compIdx-1+COMP_DATA.length)%COMP_DATA.length);
+window.nextComp=()=>renderComp((compIdx+1)%COMP_DATA.length);
+renderComp(0);
+
+/* ──────────────────────────────────────────────
+   SENSOR SECTION
+────────────────────────────────────────────── */
+document.getElementById('sensor-grid').innerHTML=SENSOR_DATA.map((s,i)=>`
+  <div class="sensor-card" id="sc${i}" onclick="highlightSensor(${i})">
+    <div class="sc-icon">${sensorIcon(s.icon)}</div>
+    <h4 class="sc-name">${s.name}</h4>
+    <p class="sc-measure">${s.measure}</p>
+    <div class="sc-field"><p class="sc-field-label">Location</p><p class="sc-field-text">${s.loc}</p></div>
+    <div class="sc-field"><p class="sc-field-label">Purpose</p><p class="sc-field-text">${s.purpose}</p></div>
+    <div class="sc-field"><p class="sc-field-label">Safety Function</p><p class="sc-field-text">${s.safety}</p></div>
+  </div>`).join('');
+
+const svgDotIds=['svgd0','svgd1','svgd2','svgd3','svgd4','svgd5'];
+window.highlightSensor=function(i){
+  svgDotIds.forEach((id,j)=>{
+    const d=document.getElementById(id);
+    if(d){d.style.fill=j===i?'#E4B51C':'#252725';d.style.stroke=j===i?'#E4B51C':'#9A9B95';}
+  });
+  document.querySelectorAll('.sl-dot').forEach((d,j)=>d.classList.toggle('lit',j===i));
+  document.querySelectorAll('.sensor-card').forEach((c,j)=>c.classList.toggle('lit',j===i));
+  document.getElementById('sc'+i)?.scrollIntoView({behavior:'smooth',block:'nearest'});
+};
+document.querySelectorAll('.svgdot').forEach(d=>{
+  d.addEventListener('click',()=>highlightSensor(parseInt(d.dataset.si)));
+});
+
+/* ──────────────────────────────────────────────
+   GALLERY
+────────────────────────────────────────────── */
+let galIdx=0;
+const galEl=document.getElementById('types-gallery');
+window.galleryGo=function(i){
+  galIdx=i;
+  galEl.scrollTo({left:i*401,behavior:'smooth'});
+  document.querySelectorAll('.gallery-dot').forEach((d,j)=>d.classList.toggle('active',j===i));
+};
+window.galleryNext=()=>galleryGo((galIdx+1)%5);
+window.galleryPrev=()=>galleryGo((galIdx-1+5)%5);
+galEl.addEventListener('scroll',()=>{
+  const i=Math.round(galEl.scrollLeft/401);
+  if(i!==galIdx){galIdx=i;document.querySelectorAll('.gallery-dot').forEach((d,j)=>d.classList.toggle('active',j===i));}
+});
+
+/* ──────────────────────────────────────────────
+   NAVIGATION BEHAVIOR
+────────────────────────────────────────────── */
+window.addEventListener('scroll',()=>{
+  document.getElementById('nav').classList.toggle('scrolled',scrollY>60);
+  const secs=['machine','anatomy','components','mechanics','sensors','types','safety','industry'];
+  let cur='';
+  secs.forEach(id=>{const el=document.getElementById(id);if(el&&scrollY>=el.offsetTop-150)cur=id;});
+  document.querySelectorAll('.nav-links a').forEach(a=>a.classList.toggle('active',a.dataset.sec===cur));
+});
+
+/* ──────────────────────────────────────────────
+   SCROLL REVEAL (IntersectionObserver)
+────────────────────────────────────────────── */
+const ro=new IntersectionObserver(entries=>entries.forEach(e=>{ if(e.isIntersecting)e.target.classList.add('in'); }),{threshold:.08});
+document.querySelectorAll('.reveal').forEach(el=>ro.observe(el));
+
+/* ──────────────────────────────────────────────
+   STATUS BARS ANIMATION
+────────────────────────────────────────────── */
+const sfTargets=[62,48,84,55,20];
+const sfObs=new IntersectionObserver(entries=>entries.forEach(e=>{
+  if(e.isIntersecting){
+    sfTargets.forEach((w,i)=>{setTimeout(()=>{const el=document.getElementById('sf'+i);if(el)el.style.width=w+'%';},200+i*180);});
+    sfObs.unobserve(e.target);
+  }
+}),{threshold:.3});
+const safetyEl=document.getElementById('safety'); if(safetyEl)sfObs.observe(safetyEl);
+
+/* ──────────────────────────────────────────────
+   BAR CHART ANIMATION
+────────────────────────────────────────────── */
+const bcObs=new IntersectionObserver(entries=>entries.forEach(e=>{
+  if(e.isIntersecting){
+    e.target.querySelectorAll('.bar-fill').forEach((b,i)=>{
+      setTimeout(()=>{b.style.width=(parseFloat(b.dataset.w)*100)+'%';b.classList.add('animated');},i*140);
+    });
+    bcObs.unobserve(e.target);
+  }
+}),{threshold:.3});
+const bcEl=document.getElementById('bar-chart'); if(bcEl)bcObs.observe(bcEl);
+
+/* ──────────────────────────────────────────────
+   HYDRAULIC NODE PULSE
+────────────────────────────────────────────── */
+let hydStep=0;
+setInterval(()=>{
+  document.querySelectorAll('.hyd-box').forEach(b=>b.classList.remove('active'));
+  document.getElementById('hyd'+(hydStep+1))?.classList.add('active');
+  hydStep=(hydStep+1)%4;
+},700);
+</script>
+<script type="module" src="js/digital-twin.js"></script>
+<script>
+(function () {
+  const nav = document.getElementById('nav');
+  const simulator = document.getElementById('live-twin');
+
+  if (!nav || !simulator) return;
+
+  const observer = new IntersectionObserver(
+    function (entries) {
+      const entry = entries[0];
+
+      if (entry.isIntersecting) {
+        nav.classList.add('simulator-active');
+      } else {
+        nav.classList.remove('simulator-active');
+      }
+    },
+    {
+      threshold: 0.15
+    }
+  );
+
+  observer.observe(simulator);
+})();
+</script>
+</body>
+</html>
+

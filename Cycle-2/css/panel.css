@@ -1,0 +1,299 @@
+/* ============================================================
+   SENSOR PANEL — standalone demo (Abhishek's Cycle-2 part)
+   Design tokens copied verbatim from Mobile_Crane_website/index.html
+   so this drops into the real site with zero visual rework.
+============================================================ */
+:root {
+  --dark-base:       #111211;
+  --dark-surface:    #181A18;
+  --dark-secondary:  #202220;
+  --border:          #2B2D29;
+  --border-light:    #D0CEC6;
+  --text-primary:    #F1F0E9;
+  --text-secondary:  #9A9B95;
+  --text-dark:       #1C1E1C;
+  --text-dark-sec:   #5C5E5A;
+  --crane-yellow:    #E4B51C;
+  --crane-yellow-d:  #B8920F;
+  --light-warm:      #F4F2EA;
+  --light-surface:   #EDEBE3;
+  --amber:           #D4881A;
+  --red-crit:        #A63228;
+  --green-ok:        #3A6B42;
+  --font-head:       'IBM Plex Sans', sans-serif;
+  --font-body:       'Manrope', sans-serif;
+  --font-mono:       'IBM Plex Mono', monospace;
+  --transition:      0.35s cubic-bezier(0.4,0,0.2,1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--dark-base);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.panel-page { max-width: 1180px; margin: 0 auto; padding: 64px 32px 96px; }
+
+.panel-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 18px;
+}
+.panel-eyebrow .clock { color: var(--crane-yellow); }
+
+.panel-title {
+  font-family: var(--font-head);
+  font-size: clamp(30px, 3.6vw, 46px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 10px;
+}
+.panel-sub {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-secondary);
+  max-width: 620px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+/* ---- Alert banner ---- */
+.alert-banner {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--green-ok);
+  background: var(--dark-surface);
+  padding: 18px 24px;
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.alert-banner.level-warning { border-left-color: var(--amber); }
+.alert-banner.level-critical { border-left-color: var(--red-crit); }
+.alert-label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--green-ok);
+}
+.alert-banner.level-warning .alert-label { color: var(--amber); }
+.alert-banner.level-critical .alert-label { color: var(--red-crit); }
+.alert-reason {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+/* ---- Layout ---- */
+.panel-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 1px;
+}
+.panel-col { background: var(--dark-surface); padding: 40px; }
+
+.col-title {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+}
+
+/* ---- Controls ---- */
+.control { margin-bottom: 26px; }
+.control-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+.control-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.control-label .hint { color: var(--text-dark-sec); text-transform: none; letter-spacing: 0; font-size: 11px; }
+.control-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--crane-yellow);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 3px;
+  background: var(--border);
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 18px;
+  background: var(--crane-yellow);
+  cursor: pointer;
+  border: none;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 18px;
+  background: var(--crane-yellow);
+  cursor: pointer;
+  border: none;
+  border-radius: 0;
+}
+input[type="range"]:focus-visible { outline: 2px solid var(--crane-yellow); outline-offset: 4px; }
+
+select {
+  width: 100%;
+  background: var(--dark-base);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  padding: 10px 12px;
+}
+select:focus-visible { outline: 2px solid var(--crane-yellow); outline-offset: 2px; }
+
+.btn-row { display: flex; gap: 10px; margin-top: 32px; flex-wrap: wrap; }
+button.panel-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 12px 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+button.panel-btn:hover { border-color: var(--crane-yellow); color: var(--crane-yellow); }
+button.panel-btn.active { border-color: var(--crane-yellow); color: var(--crane-yellow); background: rgba(228,181,28,0.08); }
+
+/* ---- Sensor readout tiles ---- */
+.sensor-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  margin-bottom: 1px;
+}
+.tile {
+  background: var(--dark-base);
+  padding: 26px 24px;
+}
+.tile-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.tile-value {
+  font-family: var(--font-head);
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.tile-value .unit {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 6px;
+}
+.tile-value.na { color: var(--text-dark-sec); font-size: 18px; }
+.tile.state-warn .tile-value { color: var(--amber); }
+.tile.state-crit .tile-value { color: var(--red-crit); }
+.tile-note {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-dark-sec);
+  margin-top: 8px;
+}
+
+/* ---- Derived status block (reuses site's status-item pattern) ---- */
+.status-block {
+  background: var(--dark-base);
+  border: 1px solid var(--border);
+  padding: 40px;
+}
+.status-item { margin-bottom: 22px; }
+.status-item:last-child { margin-bottom: 0; }
+.status-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.status-item-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.status-item-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.status-item-val.ok { color: var(--green-ok); }
+.status-item-val.warn { color: var(--amber); }
+.status-item-val.crit { color: var(--red-crit); }
+.status-track { height: 3px; background: var(--border); position: relative; overflow: hidden; }
+.status-fill { position: absolute; left: 0; top: 0; height: 100%; transition: width 0.6s cubic-bezier(0.4,0,0.2,1), background 0.3s; }
+.status-fill.ok { background: var(--green-ok); }
+.status-fill.warn { background: var(--amber); }
+.status-fill.crit { background: var(--red-crit); }
+
+.panel-footer {
+  margin-top: 28px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--text-dark-sec);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 860px) {
+  .panel-grid { grid-template-columns: 1fr; }
+  .sensor-tiles { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .sensor-tiles { grid-template-columns: 1fr; }
+  .panel-col { padding: 28px 22px; }
+}
