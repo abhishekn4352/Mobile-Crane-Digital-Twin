@@ -1,29 +1,12 @@
-// panel.js — Abhishek's Sensor Panel (Cycle 2)
-// Consumes Ajit's loadchart.js and Sujal's stability.js UNCHANGED — this file only
-// wires their functions to live inputs and a readout. No load-chart or stability
-// logic is duplicated or reimplemented here.
-
 import { CHART, ratedCapacity, radiusFromAngle } from './loadchart.js';
 import { stabilityVerdict, loadGroundPosition, outriggerPolygonForSpread, combinedCoG } from './stability.js';
 
-// Real outrigger footprint from the Grove GMK5250L-1 product guide (page 13/17):
-// "8,95 x 7,8 m". Longitudinal x lateral spread, centred on the slew axis.
 const OUTRIGGER_SPREAD_X = 8.95;
 const OUTRIGGER_SPREAD_Z = 7.8;
-
-// ASSUMPTION, not a manufacturer figure: the raw hook-load ground position alone
-// (STARTER-KIT §4 step 2) sits outside an 8.95x7.8m footprint at almost any real
-// working radius — the outriggers are metres wide, the boom reaches tens of metres.
-// Sujal's stability.js explicitly documents combinedCoG() as "a truer tipping check"
-// for exactly this reason. We assume the crane's own unladen mass and centre it on
-// the slew axis; state this assumption if asked in the Q&A, it is not from the PDF.
 const MACHINE_MASS_T = 72;
 const MACHINE_X = 0;
 const MACHINE_Z = 0;
 
-// Thresholds (stated assumption, not manufacturer data): warn at 85% of rated
-// capacity, critical at/over 100%. This is what the "sensor panel" reads off
-// the load chart — it does not change ratedCapacity()'s own logic.
 const WARN_UTILIZATION = 0.85;
 const WARN_MARGIN_M = 1.5; // matches stability.js DEFAULT_WARN_MARGIN_M
 
@@ -35,25 +18,6 @@ const state = {
   outriggerDeployed: true,
 };
 
-let demoTimer = null;
-let demoStartedAt = 0;
-const DEMO_SCRIPT = [
-  // 1. Short radius, light load — normal.
-  { t: 0,      boomLengthM: 20, boomAngleDeg: 75, slewDeg: 0,  loadT: 8,  outriggerDeployed: true },
-  // 2. Boom out, load up — still normal, heading toward warning.
-  { t: 4500,   boomLengthM: 38, boomAngleDeg: 50, slewDeg: 20, loadT: 22, outriggerDeployed: true },
-  // 3. Long radius, moderate load — approaching the rated limit (warning).
-  { t: 9500,   boomLengthM: 55, boomAngleDeg: 35, slewDeg: 30, loadT: 32, outriggerDeployed: true },
-  // 4. Push the load further at that same long radius — overload (chart) and likely tipping (geometry) together.
-  { t: 14500,  boomLengthM: 55, boomAngleDeg: 35, slewDeg: 30, loadT: 46, outriggerDeployed: true },
-  // 5. Back to the short, light configuration from step 1 — but outriggers stowed.
-  //    Isolates the stability check: the load chart alone would call this fine.
-  { t: 19500,  boomLengthM: 20, boomAngleDeg: 75, slewDeg: 0,  loadT: 8,  outriggerDeployed: false },
-  // 6. Redeploy and reset to the default baseline.
-  { t: 24000,  boomLengthM: 30, boomAngleDeg: 60, slewDeg: 0,  loadT: 15, outriggerDeployed: true },
-  { t: 28000,  boomLengthM: 30, boomAngleDeg: 60, slewDeg: 0,  loadT: 15, outriggerDeployed: true },
-];
-const DEMO_DURATION = DEMO_SCRIPT[DEMO_SCRIPT.length - 1].t;
 
 function lerp(a, b, f) { return a + (b - a) * f; }
 
@@ -69,12 +33,10 @@ function demoFrameAt(elapsed) {
     boomAngleDeg: lerp(a.boomAngleDeg, b.boomAngleDeg, f),
     slewDeg: lerp(a.slewDeg, b.slewDeg, f),
     loadT: lerp(a.loadT, b.loadT, f),
-    // outrigger state switches at the earlier keyframe, no interpolation for a boolean
     outriggerDeployed: a.outriggerDeployed,
   };
 }
 
-// ---- DOM refs ----
 const el = (id) => document.getElementById(id);
 const refs = {
   boomLength: el('inBoomLength'), boomLengthVal: el('valBoomLength'),
@@ -127,7 +89,7 @@ function classifyOverall(capacityT, utilization, verdict) {
 function render(nowMs) {
   const { boomLengthM, boomAngleDeg, slewDeg, loadT, outriggerDeployed } = state;
 
-  // Reflect current control values (also used when demo mode drives sliders)
+  // Reflect current control values 
   refs.boomLength.value = boomLengthM;
   refs.boomAngle.value = boomAngleDeg;
   refs.slew.value = slewDeg;
@@ -244,7 +206,6 @@ function wireEvents() {
   });
 }
 
-// Independent tick so hydraulic pressure + clock look "live" even with no input change
 function startClock() {
   setInterval(() => { if (!demoTimer) render(Date.now()); }, 700);
 }
