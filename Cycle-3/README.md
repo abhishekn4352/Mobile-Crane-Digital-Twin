@@ -1,8 +1,10 @@
-# Cycle 3 — Failure Detector
+# Cycle 3 — Mobile Crane Digital Twin
+
+## Module 2 — Failure Detector
 
 **Module Owner:** Rushikesh
 
-## 1. Module Responsibility
+### Module Responsibility
 
 The Failure Detector monitors the crane telemetry data and identifies
 abnormal operating conditions during playback.
