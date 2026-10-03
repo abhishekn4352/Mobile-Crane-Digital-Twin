@@ -245,7 +245,3 @@ Test results will be added after implementation.
 | Alarm list | Module 2 detector | To be implemented |
 | LIVE/MANUAL badge | Module 1 mode state | To be implemented |
 | Data-quality indicator | Module 1 / Module 2 | To be implemented |
-
-### 6. Module Integration
-
-Telemetry sample + mode (Module 1) + alarms (Module 2) + capacity and stability (Module 3) -> Sensor Panel & Alarm UI.
