@@ -182,75 +182,70 @@ information to the Sensor and Alarm UI.
 The final integration will be performed with the Cycle 3 simulator
 after the individual modules have been developed and tested.
 
+---
 
-Module 4 — Sensor Panel & Alarm UI
-Module Owner: Abhishek
+## Module 4 — Sensor Panel & Alarm UI
 
-1. Module Responsibility
-The Sensor Panel & Alarm UI module displays the live state of the crane and
-its alarms. It only shows data. It does not calculate chart or stability
-values itself.
+**Module Owner: Abhishek**
+
+### 1. Module Responsibility
+
+The Sensor Panel & Alarm UI module displays the live state of the crane and its alarms. It only shows data. It does not calculate chart or stability values itself.
 
 Key responsibilities:
-- Show the sensor panel from the active telemetry sample: load (t), boom
-  angle (°), boom length (m), working radius (m), outrigger state, hydraulic
-  pressure (bar). Also show wind (km/h), slew (°) and the four pad
-  reactions.
-- Show rated capacity and utilisation (load / rated capacity), taken from
-  the shared chart module.
-- Show the stability verdict from the shared stability module.
-- Show a LIVE (telemetry) / MANUAL (override) badge that is always visible.
-  In LIVE mode the sliders reflect incoming values. Touching a slider
-  switches to MANUAL and the badge changes.
-- Show a data-quality indicator: OK / STALE (dropout) / BAD DATA
-  (impossible row).
-- Show an alarm list. Each alarm displays failure type, triggering value,
-  rule violated and the first telemetry timestamp at which it became true.
-- Keep the existing visual style: dark graphite, warm off-white, crane
-  yellow; no neon, no glassmorphism. Reuse the CSS variables --dark-surface,
-  --crane-yellow, --green-ok, --amber, --red-crit.
 
-2. Inputs (interfaces with other modules)
+- Show the sensor panel from the active telemetry sample: load (t), boom angle (°), boom length (m), working radius (m), outrigger state, hydraulic pressure (bar). Also show wind (km/h), slew (°) and the four pad reactions.
+- Show rated capacity and utilisation (load / rated capacity), taken from the shared chart module.
+- Show the stability verdict from the shared stability module.
+- Show a LIVE (telemetry) / MANUAL (override) badge that is always visible. In LIVE mode the sliders reflect incoming values. Touching a slider switches to MANUAL and the badge changes.
+- Show a data-quality indicator: OK / STALE (dropout) / BAD DATA (impossible row).
+- Show an alarm list. Each alarm displays failure type, triggering value, rule violated and the first telemetry timestamp at which it became true.
+- Keep the existing visual style: dark graphite, warm off-white, crane yellow; no neon, no glassmorphism. Reuse the CSS variables `--dark-surface`, `--crane-yellow`, `--green-ok`, `--amber`, `--red-crit`.
+
+### 2. Inputs (interfaces with other modules)
+
 - Module 1 (Ajit): currentTelemetrySample, mode (LIVE/MANUAL), playback clock.
-- Module 2 (Rushikesh): alarm objects {type, value, rule, ts, severity}.
-- Module 3 (Sujal): ratedCapacity(...) and stabilityVerdict(...).
+- Module 2 (Rushikesh): alarm objects `{type, value, rule, ts, severity}`.
+- Module 3 (Sujal): `ratedCapacity(...)` and `stabilityVerdict(...)`.
+
 The UI keeps no second copy of chart or stability code.
 
-3. Behaviour Rules
-- Every field is bound to live state. No static placeholders.
-- Alarms are latched: one entry per alarm, stamped with the first
-  timestamp. They are not repeated every second. Active alarms are
-  highlighted and cleared alarms are greyed out.
-- A STALE or BAD DATA sample is flagged as a data-quality problem, not
-  shown as a crane failure.
-- If the rated capacity is null (chart cell not permitted), show
-  "NOT PERMITTED" and not a number.
-- In MANUAL mode the badge turns amber and the telemetry-driven alarms are
-  labelled as simulated.
+### 3. Behaviour Rules
 
-4. Testing
-Test file: js/test_sensorPanelUI.mjs
+- Every field is bound to live state. No static placeholders.
+- Alarms are latched: one entry per alarm, stamped with the first timestamp. They are not repeated every second. Active alarms are highlighted and cleared alarms are greyed out.
+- A STALE or BAD DATA sample is flagged as a data-quality problem, not shown as a crane failure.
+- If the rated capacity is null (chart cell not permitted), show "NOT PERMITTED" and not a number.
+- In MANUAL mode the badge turns amber and the telemetry-driven alarms are labelled as simulated.
+
+### 4. Testing
+
+Test file: `js/test_sensorPanelUI.mjs`
+
 - Each panel field changes when the sample changes.
 - Mode badge switches on slider touch, and back to LIVE on request.
 - Alarm list shows type, value, rule and first timestamp, with no repeats.
 - Null capacity renders "NOT PERMITTED".
 - STALE and BAD DATA states render without throwing.
+
 Test results will be added after implementation.
 
-5. Real vs Faked
-Feature                  Source                         Status
-Load, boom length/angle  Module 1 telemetry sample      To be validated
-Working radius           Telemetry / radiusFromAngle    To be validated
-Outrigger state, pads    Module 1 telemetry sample      To be validated
-Hydraulic pressure       Module 1 telemetry sample      To be validated
-Wind                     Module 1 telemetry sample      To be validated
-Rated capacity           Module 3 chart module          To be validated
-Utilisation              load / Module 3 capacity       To be validated
-Stability indicator      Module 3 stability module      To be validated
-Alarm list               Module 2 detector              To be implemented
-LIVE/MANUAL badge        Module 1 mode state            To be implemented
-Data-quality indicator   Module 1 / Module 2            To be implemented
+### 5. Real vs Faked
 
-6. Module Integration
-Telemetry sample + mode (Module 1) + alarms (Module 2) + capacity and
-stability (Module 3) -> Sensor Panel & Alarm UI.
+| Feature | Source | Status |
+|---|---|---|
+| Load, boom length/angle | Module 1 telemetry sample | To be validated |
+| Working radius | Telemetry / radiusFromAngle | To be validated |
+| Outrigger state, pads | Module 1 telemetry sample | To be validated |
+| Hydraulic pressure | Module 1 telemetry sample | To be validated |
+| Wind | Module 1 telemetry sample | To be validated |
+| Rated capacity | Module 3 chart module | To be validated |
+| Utilisation | load / Module 3 capacity | To be validated |
+| Stability indicator | Module 3 stability module | To be validated |
+| Alarm list | Module 2 detector | To be implemented |
+| LIVE/MANUAL badge | Module 1 mode state | To be implemented |
+| Data-quality indicator | Module 1 / Module 2 | To be implemented |
+
+### 6. Module Integration
+
+Telemetry sample + mode (Module 1) + alarms (Module 2) + capacity and stability (Module 3) -> Sensor Panel & Alarm UI.
