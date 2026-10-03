@@ -1,5 +1,57 @@
 # Cycle 3 — Mobile Crane Digital Twin
 
+## Module 1 — Playback & Clock
+
+**Module Owner:** Ajit
+
+### 1. Module Responsibility
+
+The Playback & Clock module is responsible for loading, parsing, and streaming the crane telemetry data (CSV) across a time-based playback engine.
+
+Key responsibilities include:
+
+- Reading and parsing the recorded telemetry CSV file.
+- Managing playback clock based on the telemetry timestamps (`ts`).
+- Providing play/pause controls and speed multiplier adjustments (`1x`, `10x`, `50x`, `100x`).
+- Maintaining the active Telemetry State for downstream modules.
+- Handling the `LIVE` vs `MANUAL` operating mode toggle:
+  - **LIVE Mode:** Crane state is driven strictly by telemetry timestamp progression.
+  - **MANUAL Mode:** Telemetry stream pauses and user UI sliders gain control.
+
+### 2. Telemetry Parsing & Clock Mechanics
+
+- Parse incoming CSV row-by-row containing: `timestamp`, `load`, `boom_length`, `boom_angle`, `slew_angle`, `outrigger_state`, `hydraulic_pressure`.
+- Step through telemetry data frame-by-frame aligned with standard timer intervals.
+- Expose the active `currentTelemetrySample` state object to Failure Detector, Stability/Loadchart, and UI panels.
+
+### 3. Playback Controls & Modes
+
+- **Controls:** Play, Pause, Reset, Jump to Timestamp.
+- **Playback Rates:** `1x` (Real-time), `10x`, `50x`, `100x` fast-forward.
+- **Mode Toggle:**
+  - `LIVE`: Read-only telemetry stream driving the simulator.
+  - `MANUAL`: Interactive override using UI sliders.
+
+### 4. Testing
+
+A dedicated test file will be maintained:
+
+`js/test_playbackClock.mjs`
+
+Tests will cover:
+- CSV parsing accuracy and error handling.
+- Timestamp ordering and frame-stepping logic.
+- Playback speed calculations and clock drift prevention.
+- Seamless state switching between `LIVE` and `MANUAL` modes.
+
+### 5. Module Integration
+
+The Playback & Clock module serves as the central data provider (Telemetry Pipeline) for the entire Digital Twin architecture:
+
+`CSV File -> Playback Engine -> Telemetry State -> Shared Calculations / Failure Detector / 3D & UI`
+
+---
+
 ## Module 2 — Failure Detector
 
 **Module Owner:** Rushikesh
