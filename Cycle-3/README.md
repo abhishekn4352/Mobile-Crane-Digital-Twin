@@ -183,7 +183,202 @@ The final integration will be performed with the Cycle 3 simulator
 after the individual modules have been developed and tested.
 
 ---
+## Module 3 — Stability & Load Chart Module + Tests
 
+**Module Owner:** Sujal
+
+### 1. Module Responsibility
+
+The Stability & Load Chart Module provides the validated crane load-capacity and stability calculations used by the Cycle 3 Digital Twin.
+
+Key responsibilities:
+
+* Look up rated capacity for the Grove GMK5250L-1.
+* Determine rated capacity using boom length, boom angle, working radius, and outrigger configuration.
+* Handle full-outrigger and on-rubber operating conditions using the existing load-chart data.
+* Interpolate between available load-chart values where required.
+* Calculate crane stability using the existing tested stability implementation.
+* Maintain a single source of truth for load-chart and stability calculations.
+* Provide rated capacity and stability results to the Failure Detector and Sensor Panel.
+* Maintain tests for chart lookup, interpolation, and stability calculations.
+
+### 2. Load Chart
+
+The module uses the existing Grove GMK5250L-1 load-chart implementation.
+
+The lookup uses:
+
+* Boom length
+* Boom angle
+* Working radius
+* Outrigger configuration
+
+The module uses the existing chart data rather than hard-coded capacity values in the Cycle 3 UI.
+
+Where required, interpolation is performed between available chart values.
+
+If the operating condition is not permitted by the load chart, the module returns `null`. The Sensor Panel displays this condition as **NOT PERMITTED**.
+
+### 3. Stability Calculation
+
+The module uses the existing tested stability implementation to determine the crane's stability condition.
+
+Inputs include:
+
+* Current load
+* Working radius
+* Slew angle
+* Outrigger configuration
+* Crane Centre of Gravity (CoG)
+* Load position
+* Outrigger support polygon
+
+Coordinate convention:
+
+```text
+x = radius × cos(slew angle)
+z = radius × sin(slew angle)
+```
+
+where `slew = 0°` represents the positive X direction.
+
+The combined Centre of Gravity is evaluated relative to the outrigger support polygon to determine the stability condition.
+
+### 4. Existing Stability Functions
+
+The module reuses the existing tested stability functions rather than creating a second calculation:
+
+* `pointInPolygon`
+* `loadGroundPosition`
+* `edgeDistanceM`
+* `stabilityVerdict`
+* `combinedCoG`
+* `outriggerPolygonForSpread`
+
+These functions form the authoritative stability calculation used by the other Cycle 3 modules.
+
+### 5. Inputs
+
+The module receives the current crane operating state, including:
+
+* Load
+* Boom length
+* Boom angle
+* Working radius
+* Slew angle
+* Outrigger state/configuration
+
+During Cycle 3 playback, these values are supplied by the Playback & Clock module through the active telemetry state.
+
+### 6. Outputs
+
+The module provides:
+
+* **Rated capacity**
+
+  * Returns the calculated/validated capacity.
+  * Returns `null` when the operating condition is not permitted.
+
+* **Stability verdict**
+
+  * Provides the result from the tested stability calculation.
+
+* **Utilisation**
+
+```text
+Utilisation = Load / Rated Capacity
+```
+
+The Sensor Panel uses the shared rated-capacity result and does not maintain a separate load-chart calculation.
+
+### 7. Testing
+
+Dedicated tests cover:
+
+* Load-chart lookup
+* Valid reference points
+* Load-chart interpolation
+* Invalid/not-permitted conditions
+* Full-outrigger conditions
+* On-rubber conditions
+* Load ground position
+* Combined Centre of Gravity
+* Outrigger support polygon
+* Point-in-polygon calculation
+* Edge distance
+* Final stability verdict
+
+The tests ensure that the load-chart and stability calculations are validated before being used by the Cycle 3 Failure Detector and Sensor Panel.
+
+### 8. Module Integration
+
+The Cycle 3 data flow is:
+
+```text
+Telemetry CSV
+      ↓
+Playback & Clock
+      ↓
+currentTelemetrySample
+      ↓
+Stability & Load Chart Module
+      ↓
+Rated Capacity / Stability Verdict
+      ↓
+Failure Detector / Sensor Panel
+```
+
+Module 3 does not control playback. It receives the current telemetry state and provides the validated load-chart and stability results required by the other modules.
+
+### 9. Single Source of Truth
+
+Module 3 is the single source of truth for rated capacity and stability calculations.
+
+No duplicate load-chart lookup, interpolation, outrigger geometry, Centre of Gravity calculation, or stability calculation should be implemented inside:
+
+* Failure Detector
+* Sensor Panel
+* 3D UI
+* Page-level code
+
+All modules must use the tested Module 3 calculations.
+
+### 10. Real vs Faked
+
+| Item                      | Source / Implementation                          | Status                 |
+| ------------------------- | ------------------------------------------------ | ---------------------- |
+| Rated capacity            | Existing Grove GMK5250L-1 load-chart module      | Computed               |
+| Load-chart lookup         | Existing chart data and lookup logic             | Computed               |
+| Load-chart interpolation  | Existing interpolation logic                     | Computed               |
+| Full-outrigger capacity   | Existing load-chart module                       | Computed               |
+| On-rubber capacity        | Existing load-chart module                       | Computed               |
+| Working radius            | Cycle 3 telemetry / existing radius calculation  | Data-driven / Computed |
+| Load position             | Existing stability calculation                   | Computed               |
+| Combined CoG              | Existing stability module                        | Computed               |
+| Outrigger support polygon | Existing stability geometry                      | Computed               |
+| Stability verdict         | Existing tested stability module                 | Computed               |
+| Utilisation               | Load / shared rated capacity                     | Computed               |
+| Chart tests               | Module 3 test suite                              | Tested                 |
+| Stability tests           | Module 3 test suite                              | Tested                 |
+| Overload decision         | Failure Detector using Module 3 capacity         | Cycle 3 Integration    |
+| Stability decision        | Failure Detector using Module 3 stability result | Cycle 3 Integration    |
+
+### 11. Cycle 3 Integration Status
+
+| Component                    | Source                             | Status               |
+| ---------------------------- | ---------------------------------- | -------------------- |
+| Grove GMK5250L-1 chart       | Existing validated chart module    | Existing             |
+| Capacity lookup              | Existing chart module              | Existing             |
+| Interpolation                | Existing interpolation logic       | Existing             |
+| Stability geometry           | Existing stability module          | Existing             |
+| Stability verdict            | Existing stability module          | Existing             |
+| Chart tests                  | Module 3 test suite                | Existing / Validated |
+| Stability tests              | Module 3 test suite                | Existing / Validated |
+| Telemetry-driven inputs      | Module 1 — Playback & Clock        | Cycle 3 Integration  |
+| Failure Detector integration | Module 2 — Failure Detector        | Cycle 3 Integration  |
+| Sensor Panel integration     | Module 4 — Sensor Panel & Alarm UI | Cycle 3 Integration  |
+
+---
 ## Module 4 — Sensor Panel & Alarm UI
 
 **Module Owner: Abhishek**
