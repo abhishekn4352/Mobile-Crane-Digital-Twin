@@ -647,7 +647,10 @@ input[type=range].control-slider::-moz-range-track{height:4px;border-radius:3px;
   </div>
 </div>
 
-<script>
+<script type="module">
+import { CHART, ratedCapacity, radiusFromAngle } from './js/loadchart.js';
+import { pointInPolygon, outriggerPolygonForSpread, loadGroundPosition, combinedCoG, stabilityVerdict } from './js/stability.js';
+
 "use strict";
 /* ======================================================================
    SECTION 1 — CONFIG, STATE, PLACEHOLDER LOAD-CHART DATA
@@ -758,22 +761,7 @@ window.updateCraneFromLiveData = function (data) {
  * of the four bracketing corners is null — it never estimates a value
  * across a forbidden region.
  */
-const CHART = {
-  model: "Grove GMK5250L-1",
-  source: "Real Data Jo Use Hua (GMK5250L-1, 80t Counterweight)",
-  config: "Full Outriggers, 360°",
-  isPlaceholder: false,
-  boomLengthsM: [13.3, 23.6, 38.0, 52.4, 70.0],
-  radiiM:       [5, 8, 10, 12, 15, 20, 30],
-  // capacityT[boomIndex][radiusIndex] — tonnes, or null if not permitted/unreachable
-  capacityT: [
-    [121.0, 84.5, 64.5, null, null, null, null],
-    [111.0, 83.5, 68.0, 57.0, 45.0, 27.0, null],
-    [59.0, 58.5, 53.0, 47.5, 40.0, 30.5, 17.2],
-    [null, null, 31.0, 31.0, 28.5, 23.5, 15.0],
-    [null, null, null, 14.5, 14.5, 14.5, 12.4]
-  ]
-};
+
 
 // Fixed sample points used by the static "Interpolation Check" validation table.
 // chartT is a hand-verified reference figure to sanity-check the live function
@@ -801,23 +789,19 @@ function fmt(v, decimals) {
    SECTION 3 — CORE CALCULATION FUNCTIONS
    ====================================================================== */
 
-// radius = boomLength * cos(angle) + offset  (angle measured from horizontal)
-function radiusFromAngle(boomLengthM, angleDeg) {
-  const a = degToRad(angleDeg);
-  return boomLengthM * Math.cos(a) + CONFIG.radiusOffsetM;
-}
+
 
 let syncingControls = false;
 
 function radiusLimitsForBoom(boomLengthM) {
   return {
-    min: Math.max(0, radiusFromAngle(boomLengthM, 85)),
-    max: Math.max(0, radiusFromAngle(boomLengthM, 0))
+    min: Math.max(0, radiusFromAngle(boomLengthM, 85, CONFIG.radiusOffsetM)),
+    max: Math.max(0, radiusFromAngle(boomLengthM, 0, CONFIG.radiusOffsetM))
   };
 }
 
 function updateWorkingRadiusFromAngle() {
-  state.workingRadius = Math.max(0, radiusFromAngle(state.boomLength, state.boomAngle));
+  state.workingRadius = Math.max(0, radiusFromAngle(state.boomLength, state.boomAngle, CONFIG.radiusOffsetM));
 }
 
 function updateBoomAngleFromWorkingRadius() {
@@ -832,99 +816,7 @@ function updateBoomAngleFromWorkingRadius() {
   state.boomAngle = clamp(Math.acos(cosine) * 180 / Math.PI, 0, 85);
 }
 
-// Generic bilinear interpolation over a rectangular cell.
-// (x0,y0)->q00  (x1,y0)->q10  (x0,y1)->q01  (x1,y1)->q11
-function bilinearInterpolation(x, y, x0, x1, y0, y1, q00, q01, q10, q11) {
-  const tx = (x1 === x0) ? 0 : (x - x0) / (x1 - x0);
-  const ty = (y1 === y0) ? 0 : (y - y0) / (y1 - y0);
-  const a = q00 + (q10 - q00) * tx;
-  const b = q01 + (q11 - q01) * tx;
-  return a + (b - a) * ty;
-}
 
-// Looks up rated capacity from the load chart via bilinear interpolation.
-// Returns null when the query is outside the chart's range, or when any
-// of the four bracketing corner cells is null (forbidden / unreachable).
-function ratedCapacity(chart, boomLengthM, radiusM) {
-  const bl = chart.boomLengthsM, rl = chart.radiiM;
-  if (boomLengthM == null || radiusM == null) return null;
-  if (boomLengthM < bl[0] || boomLengthM > bl[bl.length - 1]) return null;
-  if (radiusM < rl[0] || radiusM > rl[rl.length - 1]) return null;
-
-  const EPS = 1e-5;
-  let bi0 = 0, bi1 = 0;
-  for (let i = 0; i < bl.length; i++) { 
-    if (Math.abs(boomLengthM - bl[i]) < EPS) { bi0 = bi1 = i; break; }
-    if (i < bl.length - 1 && boomLengthM > bl[i] && boomLengthM < bl[i + 1]) { bi0 = i; bi1 = i + 1; break; }
-  }
-
-  let ri0 = 0, ri1 = 0;
-  for (let i = 0; i < rl.length; i++) { 
-    if (Math.abs(radiusM - rl[i]) < EPS) { ri0 = ri1 = i; break; }
-    if (i < rl.length - 1 && radiusM > rl[i] && radiusM < rl[i + 1]) { ri0 = i; ri1 = i + 1; break; }
-  }
-
-  const c00 = chart.capacityT[bi0][ri0];
-  const c10 = chart.capacityT[bi1][ri0];
-  const c01 = chart.capacityT[bi0][ri1];
-  const c11 = chart.capacityT[bi1][ri1];
-  if (c00 == null || c10 == null || c01 == null || c11 == null) return null; // forbidden region
-
-  return bilinearInterpolation(boomLengthM, radiusM, bl[bi0], bl[bi1], rl[ri0], rl[ri1], c00, c01, c10, c11);
-}
-
-// Standard ray-casting point-in-polygon test on the horizontal (x,z) plane.
-function pointInPolygon(point, polygon) {
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x, zi = polygon[i].z;
-    const xj = polygon[j].x, zj = polygon[j].z;
-    const intersect = ((zi > point.z) !== (zj > point.z)) &&
-      (point.x < (xj - xi) * (point.z - zi) / (zj - zi) + xi);
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-function distancePointToSegment(p, a, b) {
-  const abx = b.x - a.x, abz = b.z - a.z;
-  const apx = p.x - a.x, apz = p.z - a.z;
-  const abLen2 = abx * abx + abz * abz;
-  let t = abLen2 === 0 ? 0 : (apx * abx + apz * abz) / abLen2;
-  t = clamp(t, 0, 1);
-  const cx = a.x + abx * t, cz = a.z + abz * t;
-  return Math.hypot(p.x - cx, p.z - cz);
-}
-
-// Simplified combined center-of-gravity point used ONLY for the tipping test.
-// A suspended load on a boom crane is *meant* to sit far outside the small
-// outrigger footprint — that's the entire purpose of a boom. What actually
-// governs tip-over is the overturning moment the load exerts on the system,
-// resisted by the crane's own weight. This models that as a weighted pull
-// of the ground-projected CG toward the load, scaled by the load's share of
-// a modelled resisting weight (CONFIG.craneResistingWeightT). It is a
-// deliberate, commented simplification of real moment-balance stability
-// engineering — not a literal physical measurement.
-function effectiveTippingPoint(loadGroundPoint, loadT) {
-  const w = CONFIG.craneResistingWeightT;
-  const k = loadT <= 0 ? 0 : loadT / (loadT + w);
-  return { x: loadGroundPoint.x * k, z: loadGroundPoint.z * k };
-}
-
-// Physical stability verdict from the (weighted) load point vs. the support polygon.
-// Independent from — and must never be conflated with — the load-chart operational check.
-function stabilityVerdict(testPoint, polygon) {
-  if (!polygon || polygon.length < 3) return { verdict: 'SAFE', margin: 99 };
-  const inside = pointInPolygon(testPoint, polygon);
-  let minDist = Infinity;
-  for (let i = 0; i < polygon.length; i++) {
-    const a = polygon[i], b = polygon[(i + 1) % polygon.length];
-    minDist = Math.min(minDist, distancePointToSegment(testPoint, a, b));
-  }
-  if (!inside) return { verdict: 'TIPPING', margin: -minDist };
-  if (minDist < CONFIG.stabilityWarningMarginM) return { verdict: 'WARNING', margin: minDist };
-  return { verdict: 'SAFE', margin: minDist };
-}
 
 // Operational verdict — governed ONLY by the load chart, never by the support polygon.
 function operationalVerdict(loadT, capacityT) {
@@ -1491,8 +1383,14 @@ function updateSensors() {
 
 function updateSystemStatus() {
   state.operationalVerdict = operationalVerdict(state.load, state.ratedCapacity);
-  const testPoint = effectiveTippingPoint(state.loadGroundPoint, state.load);
-  state.stability = stabilityVerdict(testPoint, state.supportPolygon);
+  
+  // Use imported combinedCoG instead of old effectiveTippingPoint
+  const cog = combinedCoG(0, 0, CONFIG.craneResistingWeightT, state.loadGroundPoint.x, state.loadGroundPoint.z, state.load);
+  // Use imported stabilityVerdict which returns 'ok', 'warn', 'tipping'
+  const verdictStr = stabilityVerdict(cog.x, cog.z, state.supportPolygon, { warnMarginM: CONFIG.stabilityWarningMarginM });
+  
+  const vMap = { 'ok': 'SAFE', 'warn': 'WARNING', 'tipping': 'TIPPING' };
+  state.stability = { verdict: vMap[verdictStr] };
 
   const opMap = {
     OK:           { text: 'OPERATIONAL', color: 'var(--green)' },

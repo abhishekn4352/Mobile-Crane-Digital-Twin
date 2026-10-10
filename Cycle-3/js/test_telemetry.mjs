@@ -10,6 +10,8 @@
 // ============================================================
 
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { detectFailures } from './failureDetector.js';
 
 
@@ -17,8 +19,8 @@ import { detectFailures } from './failureDetector.js';
 // Telemetry file supplied by the mentor
 // ------------------------------------------------------------
 
-const CSV_PATH =
-  '../data/mobile-telemetry-2026-09-16.csv';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const CSV_PATH = join(__dirname, '../data/mobile-telemetry-2026-09-16.csv');
 
 
 // ------------------------------------------------------------
