@@ -18,7 +18,7 @@ import { detectFailures } from './failureDetector.js';
 // ------------------------------------------------------------
 
 const CSV_PATH =
-  'C:/Users/lenovo/OneDrive/Documents/Desktop/mobile-telemetry-kit/mobile-telemetry-2026-09-16.csv';
+  '../data/mobile-telemetry-2026-09-16.csv';
 
 
 // ------------------------------------------------------------
