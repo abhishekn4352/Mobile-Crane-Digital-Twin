@@ -64,6 +64,10 @@ export function expectedHydraulicPressure(
 
 export function calculateFailureInputs(telemetry) {
 
+  if (telemetry == null || typeof telemetry !== 'object') {
+    throw new TypeError('calculateFailureInputs: telemetry must be an object');
+  }
+
   const {
     load_t: loadT,
     boom_length_m: boomLengthM,
@@ -83,11 +87,10 @@ export function calculateFailureInputs(telemetry) {
   // Rated capacity from Cycle 2 load chart
   // ----------------------------------------------------------
 
-  const capacityT = ratedCapacity(
-    CHART,
-    boomLengthM,
-    radiusM
-  );
+  const capacityT =
+    Number.isFinite(boomLengthM) && Number.isFinite(radiusM)
+      ? ratedCapacity(CHART, boomLengthM, radiusM)
+      : null;
 
 
   // ----------------------------------------------------------
@@ -99,12 +102,14 @@ export function calculateFailureInputs(telemetry) {
 
   let stability = 'ok';
   let cog = { x: 0, z: 0 };
-
+  let stabilityInputsValid = true;
 
   if (
     outriggerState === 'DEPLOYED' &&
     Number.isFinite(loadT) &&
-    loadT > 0
+    loadT > 0 &&
+    Number.isFinite(radiusM) &&
+    Number.isFinite(slewDeg)
   ) {
 
     const polygon =
@@ -131,16 +136,32 @@ export function calculateFailureInputs(telemetry) {
         loadT
       );
 
-
-    stability =
-      stabilityVerdict(
-        cog.x,
-        cog.z,
-        polygon,
-        {
-          warnMarginM: WARN_MARGIN_M,
-        }
-      );
+    if (
+      !Number.isFinite(position.x) ||
+      !Number.isFinite(position.z) ||
+      !Number.isFinite(cog.x) ||
+      !Number.isFinite(cog.z)
+    ) {
+      stability = null;
+      stabilityInputsValid = false;
+    } else {
+      stability =
+        stabilityVerdict(
+          cog.x,
+          cog.z,
+          polygon,
+          {
+            warnMarginM: WARN_MARGIN_M,
+          }
+        );
+    }
+  } else if (
+    outriggerState === 'DEPLOYED' &&
+    Number.isFinite(loadT) &&
+    loadT > 0
+  ) {
+    stability = null;
+    stabilityInputsValid = false;
   }
 
 
@@ -175,23 +196,29 @@ export function calculateFailureInputs(telemetry) {
           .map(([name]) => name)
       : [];
 
+  const invalidPads =
+    deployed
+      ? Object.entries(pads)
+          .filter(([, value]) => !Number.isFinite(value))
+          .map(([name]) => name)
+      : [];
+
 
   return {
 
     capacityT,
 
     utilization:
-      capacityT == null
+      capacityT == null || !Number.isFinite(loadT)
         ? null
         : loadT / capacityT,
 
     stability,
-
+    stabilityInputsValid,
     cog,
-
     pads,
-
     liftedPads,
+    invalidPads,
 
     expectedHydraulicPressure:
       expectedHydraulicPressure(
@@ -209,6 +236,17 @@ export function calculateFailureInputs(telemetry) {
 
 export function detectFailures(telemetry) {
 
+  if (telemetry == null || typeof telemetry !== 'object') {
+    return {
+      timestamp: null,
+      status: 'INVALID_TELEMETRY',
+      failures: [],
+      errors: ['telemetry must be a non-null object'],
+      telemetry: null,
+      derived: null,
+    };
+  }
+
   const {
     ts,
     load_t: loadT,
@@ -224,8 +262,49 @@ export function detectFailures(telemetry) {
   const derived =
     calculateFailureInputs(telemetry);
 
-
   const failures = [];
+  const errors = [];
+  const validTimestamp =
+    typeof ts === 'string' &&
+    ts.trim() !== '' &&
+    Number.isFinite(Date.parse(ts));
+
+  if (!validTimestamp) {
+    errors.push('telemetry timestamp must be a valid timestamp');
+  }
+
+  const addFailure = (failure) => {
+    if (validTimestamp) failures.push(failure);
+  };
+
+  if (
+    Number.isNaN(derived.capacityT) ||
+    !Number.isFinite(boomLengthM) ||
+    !Number.isFinite(radiusM)
+  ) {
+    addFailure({
+      type: 'DATA_QUALITY',
+      timestamp: ts,
+      triggerValue: 'boom_length_m/radius_m',
+      limit: 'finite boom length and radius',
+      rule: 'load-chart inputs are missing or non-finite',
+    });
+  }
+
+  if (
+    outriggerState === 'DEPLOYED' &&
+    Number.isFinite(loadT) &&
+    loadT > 0 &&
+    !derived.stabilityInputsValid
+  ) {
+    addFailure({
+      type: 'DATA_QUALITY',
+      timestamp: ts,
+      triggerValue: 'radius_m/slew_deg/geometry',
+      limit: 'finite stability geometry',
+      rule: 'stability geometry is missing or non-finite',
+    });
+  }
 
 
   // ----------------------------------------------------------
@@ -238,7 +317,7 @@ export function detectFailures(telemetry) {
     loadT > derived.capacityT
   ) {
 
-    failures.push({
+    addFailure({
 
       type: 'OVERLOAD',
 
@@ -266,7 +345,7 @@ export function detectFailures(telemetry) {
     outriggerState === 'RETRACTED'
   ) {
 
-    failures.push({
+    addFailure({
 
       type: 'IMPROPER_OUTRIGGER_DEPLOYMENT',
 
@@ -287,11 +366,9 @@ export function detectFailures(telemetry) {
   // 3. OUTRIGGER LIFT-OFF
   // ----------------------------------------------------------
 
-  if (
-    derived.liftedPads.length > 0
-  ) {
+  if (derived.liftedPads.length > 0) {
 
-    failures.push({
+    addFailure({
 
       type: 'OUTRIGGER_LIFT_OFF',
 
@@ -309,6 +386,18 @@ export function detectFailures(telemetry) {
     });
   }
 
+  if (derived.invalidPads.length > 0) {
+    addFailure({
+      type: 'DATA_QUALITY',
+      timestamp: ts,
+      triggerValue: derived.invalidPads.join(', '),
+      limit: 'finite pad reaction on every deployed pad',
+      rule:
+        `missing or non-finite pad reaction on ` +
+        `${derived.invalidPads.join(', ')}`,
+    });
+  }
+
 
   // ----------------------------------------------------------
   // 4. GEOMETRIC STABILITY LOSS
@@ -319,10 +408,11 @@ export function detectFailures(telemetry) {
   if (
     outriggerState === 'DEPLOYED' &&
     loadT > 0 &&
+    derived.stabilityInputsValid &&
     derived.stability === 'tipping'
   ) {
 
-    failures.push({
+    addFailure({
 
       type: 'STABILITY_LOSS',
 
@@ -354,11 +444,12 @@ export function detectFailures(telemetry) {
 
   if (
     Number.isFinite(hydraulicPressureBar) &&
+    Number.isFinite(expectedPressure) &&
     hydraulicPressureBar <
       hydraulicLossThreshold
   ) {
 
-    failures.push({
+    addFailure({
 
       type: 'HYDRAULIC_PRESSURE_LOSS',
 
@@ -383,10 +474,13 @@ export function detectFailures(telemetry) {
     timestamp: ts,
 
     status:
-      failures.length === 0
-        ? 'NORMAL'
-        : 'FAILURE_DETECTED',
+      !validTimestamp
+        ? 'INVALID_TELEMETRY'
+        : failures.length === 0
+          ? 'NORMAL'
+          : 'FAILURE_DETECTED',
 
+    errors,
     failures,
 
     telemetry: {

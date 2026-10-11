@@ -10,6 +10,7 @@
 // ============================================================
 
 import fs from 'fs';
+import assert from 'node:assert/strict';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { detectFailures } from './failureDetector.js';
@@ -112,6 +113,85 @@ const telemetryRows = lines.slice(1).map(line => {
 // ------------------------------------------------------------
 
 console.log('==============================================');
+
+// ------------------------------------------------------------
+// Invalid and boundary input checks
+// ------------------------------------------------------------
+
+const validSample = {
+  ts: '2026-09-16T08:00:00+05:30',
+  load_t: 1,
+  boom_length_m: 38,
+  boom_angle_deg: 60,
+  radius_m: 10,
+  slew_deg: 0,
+  outrigger_state: 'DEPLOYED',
+  pad_fl_t: 1,
+  pad_fr_t: 1,
+  pad_rl_t: 1,
+  pad_rr_t: 1,
+  hydraulic_pressure_bar: 39,
+};
+
+const invalidChartResult = detectFailures({
+  ...validSample,
+  boom_length_m: NaN,
+});
+assert.equal(invalidChartResult.derived.capacityT, null);
+assert.equal(
+  invalidChartResult.failures.some(f => f.type === 'OVERLOAD'),
+  false
+);
+
+const invalidStabilityResult = detectFailures({
+  ...validSample,
+  radius_m: NaN,
+});
+assert.equal(invalidStabilityResult.derived.stability, null);
+assert.equal(
+  invalidStabilityResult.failures.some(f => f.type === 'STABILITY_LOSS'),
+  false
+);
+assert.equal(
+  invalidStabilityResult.failures.some(f => f.type === 'DATA_QUALITY'),
+  true
+);
+
+const invalidSlewResult = detectFailures({
+  ...validSample,
+  slew_deg: NaN,
+});
+assert.equal(invalidSlewResult.derived.stability, null);
+assert.equal(
+  invalidSlewResult.failures.some(f => f.type === 'STABILITY_LOSS'),
+  false
+);
+
+const missingPadResult = detectFailures({
+  ...validSample,
+  pad_fl_t: undefined,
+});
+assert.deepEqual(missingPadResult.derived.liftedPads, []);
+assert.deepEqual(missingPadResult.derived.invalidPads, ['FL']);
+assert.equal(missingPadResult.failures[0].type, 'DATA_QUALITY');
+
+const missingTelemetryResult = detectFailures(null);
+assert.equal(missingTelemetryResult.status, 'INVALID_TELEMETRY');
+assert.deepEqual(missingTelemetryResult.failures, []);
+
+const undefinedTelemetryResult = detectFailures(undefined);
+assert.equal(undefinedTelemetryResult.status, 'INVALID_TELEMETRY');
+assert.deepEqual(undefinedTelemetryResult.failures, []);
+
+const missingTimestampResult = detectFailures({
+  ...validSample,
+  ts: undefined,
+  outrigger_state: 'RETRACTED',
+});
+assert.equal(missingTimestampResult.status, 'INVALID_TELEMETRY');
+assert.deepEqual(missingTimestampResult.failures, []);
+
+console.log('Input validation checks passed');
 console.log(' CYCLE 3 TELEMETRY VALIDATION');
 console.log('==============================================');
 
