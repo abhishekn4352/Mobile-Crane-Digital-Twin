@@ -1,17 +1,13 @@
-// Cycle 3 failure detector.  Cycle 2 remains the source of truth for the
-// load chart and support-polygon primitives; Cycle 3 supplies telemetry policy.
-import { CHART, ratedCapacity, radiusFromAngle } from '../../Cycle-2/js/loadchart.js';
+// Module 3 is the single source of truth for chart, kit, and stability math.
 import {
-  stabilityVerdict,
-  loadGroundPosition,
-  outriggerPolygonForSpread,
-} from '../../Cycle-2/js/stability.js';
+  KIT,
+  capacityFor,
+  stabilityFor,
+  radiusFromAngle,
+  padReactionsFor,
+} from './craneModel.js';
 
-const OUTRIGGER_SPREAD_X = 7.8; // pads at x = +/-3.9 m
-const OUTRIGGER_SPREAD_Z = 8.9; // pads at z = +/-4.45 m
-const WARN_MARGIN_M = 1.5;
-const PIVOT_OFFSET_M = 0.8;
-const PAD_NEAR_LIFT_T = 5;
+const PAD_NEAR_LIFT_T = KIT.PAD_NEAR_LIFT_T;
 const PAD_SUM_TOLERANCE = 3;
 
 const MOTION_MASK = 0x0f;
@@ -74,7 +70,7 @@ function validationErrors(telemetry, previousTelemetry) {
   }
 
   if (finite(boomLengthM) && finite(boomAngleDeg) && finite(radiusM)) {
-    const expectedRadius = radiusFromAngle(boomLengthM, boomAngleDeg, PIVOT_OFFSET_M);
+    const expectedRadius = radiusFromAngle(boomLengthM, boomAngleDeg, KIT.PIVOT_OFFSET_M);
     if (Math.abs(radiusM - expectedRadius) > 1) {
       errors.push(`radius ${radiusM} m is inconsistent with boom geometry (${expectedRadius.toFixed(2)} m)`);
     }
@@ -108,7 +104,10 @@ function validationErrors(telemetry, previousTelemetry) {
   if (outriggerState === 'DEPLOYED') {
     if (pads.some(value => !finite(value))) errors.push('deployed pad reactions must be finite');
     else if (finite(loadT) && loadT >= 0 &&
-      Math.abs(pads.reduce((sum, value) => sum + value, 0) - (170 + loadT)) > PAD_SUM_TOLERANCE) {
+      Math.abs(
+        pads.reduce((sum, value) => sum + value, 0) -
+        (KIT.MACHINE_MASS_T + loadT)
+      ) > PAD_SUM_TOLERANCE) {
       errors.push('deployed pad reactions do not balance the 170 t kit plus load');
     }
   }
@@ -120,19 +119,6 @@ export function expectedHydraulicPressure(loadT, radiusM, boomLengthM) {
   return 20 + 0.35 * loadT * radiusM + 0.5 * boomLengthM;
 }
 
-function kitCentreOfGravity(radiusM, slewDeg, loadT) {
-  const load = loadGroundPosition(radiusM, slewDeg);
-  const angle = (slewDeg + 180) * Math.PI / 180;
-  const counterweight = { x: 3.5 * Math.cos(angle), z: 3.5 * Math.sin(angle) };
-  const boomRadius = Math.max(0, radiusM - PIVOT_OFFSET_M) / 2;
-  const boom = loadGroundPosition(boomRadius, slewDeg);
-  const total = 45 + 35 + 80 + 10 + loadT;
-  return {
-    x: (80 * counterweight.x + 10 * boom.x + loadT * load.x) / total,
-    z: (80 * counterweight.z + 10 * boom.z + loadT * load.z) / total,
-  };
-}
-
 export function calculateFailureInputs(telemetry) {
   if (telemetry == null || typeof telemetry !== 'object') {
     throw new TypeError('calculateFailureInputs: telemetry must be an object');
@@ -140,9 +126,9 @@ export function calculateFailureInputs(telemetry) {
   const loadT = telemetry.load_t;
   const boomLengthM = telemetry.boom_length_m;
   const radiusM = telemetry.radius_m;
-  const slewDeg = telemetry.slew_deg;
-  const capacityInputsValid = finite(boomLengthM) && finite(radiusM);
-  const capacityT = capacityInputsValid ? ratedCapacity(CHART, boomLengthM, radiusM) : null;
+  const capacityState = capacityFor(telemetry);
+  const capacityInputsValid = capacityState.capacityInputsValid;
+  const capacityT = capacityState.capacityT;
   const pads = {
     FL: telemetry.pad_fl_t,
     FR: telemetry.pad_fr_t,
@@ -158,31 +144,16 @@ export function calculateFailureInputs(telemetry) {
     : [];
   const invalidPads = deployed ? padEntries.filter(([, value]) => !finite(value)).map(([name]) => name) : [];
 
-  let stability = 'ok';
-  let stabilityInputsValid = true;
-  let cog = { x: 0, z: 0 };
-  if (deployed && finite(loadT) && loadT > 0 && finite(radiusM) && finite(slewDeg)) {
-    cog = kitCentreOfGravity(radiusM, slewDeg, loadT);
-    stabilityInputsValid = finite(cog.x) && finite(cog.z);
-    if (stabilityInputsValid) {
-      stability = stabilityVerdict(
-        cog.x, cog.z,
-        outriggerPolygonForSpread(OUTRIGGER_SPREAD_X, OUTRIGGER_SPREAD_Z),
-        { warnMarginM: WARN_MARGIN_M },
-      );
-    } else stability = null;
-  } else if (deployed && finite(loadT) && loadT > 0) {
-    stability = null;
-    stabilityInputsValid = false;
-  }
+  const stabilityState = stabilityFor(telemetry);
 
   return {
     capacityT,
     capacityInputsValid,
-    utilization: capacityT != null && finite(loadT) ? loadT / capacityT : null,
-    stability,
-    stabilityInputsValid,
-    cog,
+    utilization: capacityState.utilization,
+    stability: stabilityState.stability,
+    stabilityInputsValid: stabilityState.stabilityInputsValid,
+    cog: stabilityState.cog,
+    modeledPads: padReactionsFor(telemetry),
     pads,
     liftedPads,
     nearLiftedPads,

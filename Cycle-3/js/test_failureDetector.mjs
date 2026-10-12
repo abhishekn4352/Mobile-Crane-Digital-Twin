@@ -113,6 +113,9 @@ showResult(
     pad_rr_t: 89.73,
 
     hydraulic_pressure_bar: 257.4,
+    wind_kmh: 10,
+    lmi_pct: 109.47,
+    status_word: 0,
   }
 );
 
@@ -179,12 +182,12 @@ showResult(
 // 5. OUTRIGGER LIFT-OFF
 // ------------------------------------------------------------
 
-showResult(
+const liftOffResult = showResult(
   'OUTRIGGER LIFT-OFF',
   {
-    ts: '2026-09-16T15:30:00+05:30',
+    ts: '2026-09-16T15:30:01+05:30',
 
-    load_t: -3,
+    load_t: 10,
     boom_length_m: 32,
     boom_angle_deg: 65.64,
     radius_m: 14,
@@ -192,11 +195,18 @@ showResult(
 
     outrigger_state: 'DEPLOYED',
 
+    // Valid R13 total: 0 + 60 + 60 + 60 = 170 t + 10 t load.
     pad_fl_t: 0,
-    pad_fr_t: 0,
-    pad_rl_t: 0,
-    pad_rr_t: 0,
+    pad_fr_t: 60,
+    pad_rl_t: 60,
+    pad_rr_t: 60,
 
-    hydraulic_pressure_bar: 36,
+    hydraulic_pressure_bar: 118,
+    wind_kmh: 10,
+    lmi_pct: 22.12,
+    status_word: 0,
   }
 );
+if (!liftOffResult.failures.some(failure => failure.type === 'OUTRIGGER_LIFT_OFF')) {
+  throw new Error('A valid zero-reaction pad sample must retain OUTRIGGER_LIFT_OFF detection');
+}
