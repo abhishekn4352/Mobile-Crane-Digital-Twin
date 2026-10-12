@@ -52,14 +52,42 @@ showResult(
 
     outrigger_state: 'DEPLOYED',
 
+    // R13: deployed reactions must total the 170 t kit plus the 10 t load.
     pad_fl_t: 55,
     pad_fr_t: 29,
     pad_rl_t: 55,
-    pad_rr_t: 29,
+    pad_rr_t: 41,
 
     hydraulic_pressure_bar: 118,
+    wind_kmh: 10,
+    lmi_pct: 22.12,
+    status_word: 0,
   }
 );
+
+
+// The kit distribution and a large outboard load must still detect tipping.
+const tippingResult = detectFailures({
+  ts: '2026-09-16T08:00:01+05:30',
+  load_t: 100,
+  boom_length_m: 38,
+  boom_angle_deg: 39.75,
+  radius_m: 30,
+  slew_deg: 0,
+  hook_height_m: 24.30,
+  outrigger_state: 'DEPLOYED',
+  pad_fl_t: 70,
+  pad_fr_t: 65,
+  pad_rl_t: 65,
+  pad_rr_t: 70,
+  hydraulic_pressure_bar: 420,
+  wind_kmh: 10,
+  lmi_pct: 100,
+  status_word: 0,
+});
+if (!tippingResult.failures.some(failure => failure.type === 'STABILITY_LOSS')) {
+  throw new Error('A genuinely tipping synthetic sample must retain STABILITY_LOSS detection');
+}
 
 
 // ------------------------------------------------------------

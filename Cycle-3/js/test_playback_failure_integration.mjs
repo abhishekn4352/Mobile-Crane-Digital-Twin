@@ -52,14 +52,16 @@ try {
 
   clock.jumpTo('2026-09-16T11:00:00+05:30');
   assert.equal(latestSample.ts, '2026-09-16T11:00:00+05:30');
-  assertAlarm('STABILITY_LOSS', latestSample.ts);
-  console.log('PASS: Stability loss detected at', latestSample.ts);
+  assert.equal(
+    latestFailures.some(f => f.type === 'STABILITY_LOSS'),
+    false,
+    'The corrected kit stability model must not report the known false stability alarm'
+  );
+  console.log('PASS: Corrected kit stability model suppresses the known false alarm at', latestSample.ts);
   console.log('Failures:', latestFailures.map(f => f.type).join(', '));
 
   const knownFaults = [
     ['2026-09-16T11:00:01+05:30', 'HYDRAULIC_PRESSURE_LOSS'],
-    ['2026-09-16T12:40:00+05:30', 'IMPROPER_OUTRIGGER_DEPLOYMENT'],
-    ['2026-09-16T15:30:00+05:30', 'OUTRIGGER_LIFT_OFF'],
   ];
 
   for (const [timestamp, type] of knownFaults) {
@@ -68,7 +70,21 @@ try {
     assertAlarm(type, timestamp);
     console.log(`PASS: ${type} detected at`, timestamp);
   }
+
+  clock.jumpTo('2026-09-16T12:40:00+05:30');
+  assert.equal(latestSample.ts, '2026-09-16T12:40:00+05:30');
+  assert.equal(
+    latestFailures.some(f => f.type === 'IMPROPER_OUTRIGGER_DEPLOYMENT'),
+    false,
+    'A parked retracted crane must not produce a deployment alarm'
+  );
+  console.log('PASS: Parked retracted crane is not treated as an improper deployment');
+
+  clock.jumpTo('2026-09-16T15:30:00+05:30');
+  assert.equal(latestSample.ts, '2026-09-16T15:30:00+05:30');
+  assert.equal(latestResult.status, 'INVALID_TELEMETRY');
+  assert.equal(latestFailures.some(f => f.type === 'OUTRIGGER_LIFT_OFF'), false);
+  console.log('PASS: Invalid negative-load row suppresses lift-off alarm');
 } finally {
   clock.destroy();
 }
-

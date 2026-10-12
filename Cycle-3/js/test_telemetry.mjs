@@ -217,14 +217,23 @@ console.log(
 const firstDetected = new Map();
 
 const detectionCounts = new Map();
-
 let totalFailureSamples = 0;
+const resultsByTimestamp = new Map();
+let stabilityLossCount = 0;
 
+
+let previousTelemetry = null;
 
 for (const telemetry of telemetryRows) {
 
   const result =
-    detectFailures(telemetry);
+    detectFailures(telemetry, previousTelemetry);
+
+  previousTelemetry = telemetry;
+  resultsByTimestamp.set(telemetry.ts, result);
+  if (result.failures.some(failure => failure.type === 'STABILITY_LOSS')) {
+    stabilityLossCount++;
+  }
 
 
   for (const failure of result.failures) {
@@ -250,8 +259,46 @@ for (const telemetry of telemetryRows) {
       );
 
     }
+
   }
 }
+
+function resultAt(timestamp) {
+  const result = resultsByTimestamp.get(timestamp);
+  assert.ok(result, `Expected telemetry row at ${timestamp}`);
+  return result;
+}
+
+function hasFailure(result, type) {
+  return result.failures.some(failure => failure.type === type);
+}
+
+// Acceptance checks for the audited rows and device-reported conditions.
+assert.equal(hasFailure(resultAt('2026-09-16T07:03:00+05:30'), 'IMPROPER_OUTRIGGER_DEPLOYMENT'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T12:40:00+05:30'), 'IMPROPER_OUTRIGGER_DEPLOYMENT'), false);
+assert.equal(resultAt('2026-09-16T08:00:00+05:30').status, 'NORMAL');
+assert.equal(hasFailure(resultAt('2026-09-16T12:18:40+05:30'), 'NOT_PERMITTED'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T10:25:27+05:30'), 'OUTRIGGER_NEAR_LIFT_OFF'), true);
+assert.equal(stabilityLossCount, 0, 'The known false stability alarms must be eliminated');
+
+for (const timestamp of [
+  '2026-09-16T14:30:00+05:30',
+  '2026-09-16T15:00:00+05:30',
+  '2026-09-16T15:30:00+05:30',
+  '2026-09-16T17:00:00+05:30',
+]) {
+  const result = resultAt(timestamp);
+  assert.equal(result.status, 'INVALID_TELEMETRY');
+  assert.equal(hasFailure(result, 'HYDRAULIC_PRESSURE_LOSS'), false);
+  assert.equal(hasFailure(result, 'OUTRIGGER_LIFT_OFF'), false);
+}
+
+assert.equal(hasFailure(resultAt('2026-09-16T12:30:00+05:30'), 'WIND_ALERT'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T14:00:00+05:30'), 'LMI_BYPASS'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T14:09:58+05:30'), 'LMI_PREWARNING'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T09:00:00+05:30'), 'OVERLOAD'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T11:00:01+05:30'), 'HYDRAULIC_PRESSURE_LOSS'), true);
+console.log('Audited acceptance checks passed');
 
 
 // ------------------------------------------------------------
