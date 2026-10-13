@@ -385,58 +385,85 @@ All modules must use the tested Module 3 calculations.
 
 ### 1. Module Responsibility
 
-The Sensor Panel & Alarm UI module displays the live state of the crane and its alarms. It only shows data. It does not calculate chart or stability values itself.
+The Sensor Panel & Alarm UI module shows the state of the crane and its alarms, and a 3D view of the crane. It only shows data. It does not calculate chart or stability values itself.
 
-Key responsibilities:
+- Sensor panel from the active telemetry sample: load, boom angle, boom length, radius, slew, outrigger state, hydraulic pressure, wind, and the four pad reactions.
+- Rated capacity, utilisation and stability verdict, taken from the failure detector's `derived` block, which gets them from Module 3 (`js/craneModel.js`, over the Cycle-2 chart and stability code). No second copy of chart or stability code: the kit constants, the radius formula, the support polygon and the ground position of the load are imported from `craneModel.js`.
+- A **LIVE (telemetry) / MANUAL (override)** badge that is always visible. Touching a slider switches to MANUAL (badge turns amber, alarms are labelled SIMULATED). "Return to LIVE" switches back.
+- A **data-quality** badge: `OK` / `STALE` (dropout or repeated timestamp) / `BAD DATA` (an impossible row). BAD DATA and STALE are shown as data problems, never as crane failures.
+- An **alarm list**: one latched entry per alarm episode, with the alarm type, the triggering value, the rule that fired and the **first timestamp** at which it became true. Active alarms are highlighted, cleared ones greyed.
+- Device chips from `status_word` and wind: WIND ALERT, LMI BYPASS, LMI PRE-WARN, A2B.
+- **NOT PERMITTED** instead of a number when the chart has no capacity.
+- A 3D view (`js/crane3d.js`) driven by the same sample: boom length and angle, slew, outrigger deployment, hook height, and a load that **sways with the wind**.
+- A list of clock faults in the CSV (file order): the 15:20–15:25 dropout and the repeated / backwards timestamps.
 
-- Show the sensor panel from the active telemetry sample: load (t), boom angle (°), boom length (m), working radius (m), outrigger state, hydraulic pressure (bar). Also show wind (km/h), slew (°) and the four pad reactions.
-- Show rated capacity and utilisation (load / rated capacity), taken from the shared chart module.
-- Show the stability verdict from the shared stability module.
-- Show a LIVE (telemetry) / MANUAL (override) badge that is always visible. In LIVE mode the sliders reflect incoming values. Touching a slider switches to MANUAL and the badge changes.
-- Show a data-quality indicator: OK / STALE (dropout) / BAD DATA (impossible row).
-- Show an alarm list. Each alarm displays failure type, triggering value, rule violated and the first telemetry timestamp at which it became true.
-- Keep the existing visual style: dark graphite, warm off-white, crane yellow; no neon, no glassmorphism. Reuse the CSS variables `--dark-surface`, `--crane-yellow`, `--green-ok`, `--amber`, `--red-crit`.
+Look and feel: dark graphite, off-white, crane yellow; the CSS variables `--dark-surface`, `--crane-yellow`, `--green-ok`, `--amber`, `--red-crit`.
 
-### 2. Inputs (interfaces with other modules)
+### 2. Files
 
-- Module 1 (Ajit): currentTelemetrySample, mode (LIVE/MANUAL), playback clock.
-- Module 2 (Rushikesh): alarm objects `{type, value, rule, ts, severity}`.
-- Module 3 (Sujal): `ratedCapacity(...)` and `stabilityVerdict(...)`.
+| File | What it does |
+|---|---|
+| `simulator.html` | The page: sensors, 3D view, playback controls, sliders, alarm list, clock faults |
+| `js/panelModel.js` | Logic, no DOM: analyses a sample, keeps the alarm log, builds the text and colour of every element |
+| `js/panel.js` | Draws the model into the page (`textContent` only) |
+| `js/dataQuality.js` | OK / STALE / BAD DATA rules and the file-order clock-fault scan |
+| `js/crane3d.js` | 3D crane (view only) and the wind sway |
+| `crane3d-demo.html` | Stand-alone page for the 3D view |
+| `js/test_sensorPanelUI.mjs`, `test_dataQuality.mjs`, `test_crane3d.mjs` | Tests |
 
-The UI keeps no second copy of chart or stability code.
+### 3. Inputs (interfaces with other modules)
 
-### 3. Behaviour Rules
+- Module 1 (Ajit): `PlaybackClock` (`currentIndex`, `playing`, `jumpTo`, `setManual`, `setLive`, `pushManualSample`).
+- Module 2 (Rushikesh): `detectFailures(sample, previousSample)` and `expectedHydraulicPressure`. The panel uses its alarms as they are (OVERLOAD, STABILITY_LOSS, OUTRIGGER_LIFT_OFF / NEAR_LIFT_OFF, HYDRAULIC_PRESSURE_LOSS, IMPROPER_OUTRIGGER_DEPLOYMENT, NOT_PERMITTED, WIND_ALERT, LMI_BYPASS, LMI_PREWARNING, LMI_DIVERGENCE, DEVICE_OVERLOAD, A2B_ALERT, DATA_QUALITY) and only classifies and words them.
+- Module 3 (Sujal): `craneModel.js` (`KIT`, `radiusFromAngle`, `supportPolygon`, `loadGroundPosition`); the chart and stability numbers themselves reach the panel through the detector.
 
-- Every field is bound to live state. No static placeholders.
-- Alarms are latched: one entry per alarm, stamped with the first timestamp. They are not repeated every second. Active alarms are highlighted and cleared alarms are greyed out.
-- A STALE or BAD DATA sample is flagged as a data-quality problem, not shown as a crane failure.
-- If the rated capacity is null (chart cell not permitted), show "NOT PERMITTED" and not a number.
-- In MANUAL mode the badge turns amber and the telemetry-driven alarms are labelled as simulated.
+What the panel does before calling the detector:
 
-### 4. Testing
+- A blank `lmi_pct` is passed as `NaN`. The shared `parseCSV` turns an empty cell into `0`, which the detector would read as "device LMI 0 %". Without this the 12:18–12:19 rows would raise 109 false LMI_DIVERGENCE alarms.
+- The previous row is passed only if it is itself a valid row, so the row after a glitch (15:00:01, 17:00:01) is not blamed for the glitch.
+- In MANUAL mode the pad columns are not simulated. The detector gets an even split of 170 t + load so its pad checks stay silent, and the panel shows the pads as "not simulated".
 
-Test file: `js/test_sensorPanelUI.mjs`
+### 4. Behaviour Rules
 
-- Each panel field changes when the sample changes.
-- Mode badge switches on slider touch, and back to LIVE on request.
-- Alarm list shows type, value, rule and first timestamp, with no repeats.
-- Null capacity renders "NOT PERMITTED".
-- STALE and BAD DATA states render without throwing.
+- Every field is bound to the sample on screen. There are no static placeholders.
+- Alarms are latched: one entry per episode, not one per second. When the playback arrives by a jump, the first timestamp is found by looking back to the true start of the episode, so it is the same at 1×, 10×, 50×, 100× and after a jump.
+- A BAD DATA row suppresses crane alarms on that row and shows a data-problem entry instead; a STALE row (dropout, repeated timestamp) shows a STALE entry.
+- `lmi_pct` blank and chart null → "NOT PERMITTED" in red, with no made-up percentage.
+- MANUAL entries carry the tag SIMULATED.
 
-Test results will be added after implementation.
+### 5. Testing
 
-### 5. Real vs Faked
+```
+node Cycle-3/js/test_sensorPanelUI.mjs     # 103 checks
+node Cycle-3/js/test_dataQuality.mjs       # 37 checks
+node Cycle-3/js/test_crane3d.mjs           # 51 checks
+```
+
+`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads, the whole day at 3 rows per frame (21 entries), what is passed to the detector, and that nothing throws. The page itself was checked in a headless browser: no console errors, jump list, MANUAL ↔ LIVE, overload, BAD DATA, dropout, wind.
+
+Whole-day alarm log (21 entries with the current `parseCSV`; 23 once blank cells parse to `NaN`, because two single-row LMI divergence entries then appear at 12:18:00 and 12:19:50, where the device is blank but the chart still gives 41.4 t): improper deployment 07:03:00 · overload 09:00:00 · overload + LMI divergence 09:50:00 · near lift-off 10:25:20 · overload 11:00:00 · hydraulic loss 11:00:01 · NOT PERMITTED 12:18:40 · wind 12:30:00 · LMI bypass 14:00:00 · pre-warning ×4 (14:09:58, 14:19:58, 14:39:58, 14:49:58) · BAD DATA ×4 (14:30:00, 15:00:00, 15:30:00, 17:00:00) · dropout 15:25:00 · repeated timestamp 15:59:49 · dropout 16:00:02.
+
+### 6. Real vs Faked
 
 | Feature | Source | Status |
 |---|---|---|
-| Load, boom length/angle | Module 1 telemetry sample | To be validated |
-| Working radius | Telemetry / radiusFromAngle | To be validated |
-| Outrigger state, pads | Module 1 telemetry sample | To be validated |
-| Hydraulic pressure | Module 1 telemetry sample | To be validated |
-| Wind | Module 1 telemetry sample | To be validated |
-| Rated capacity | Module 3 chart module | To be validated |
-| Utilisation | load / Module 3 capacity | To be validated |
-| Stability indicator | Module 3 stability module | To be validated |
-| Alarm list | Module 2 detector | To be implemented |
-| LIVE/MANUAL badge | Module 1 mode state | To be implemented |
-| Data-quality indicator | Module 1 / Module 2 | To be implemented |
+| Load, boom length / angle, radius, slew | CSV row (Module 1) | **Real** |
+| Outrigger state, pad reactions | CSV row | **Real** |
+| Hydraulic pressure, wind speed | CSV row | **Real** |
+| Rated capacity, utilisation | Cycle-2 chart via the detector | **Real** (the chart is ours; one cell, 70 m / 30 m, is unchecked against the PDF) |
+| Stability verdict | Cycle-2 stability via the detector, kit centre of gravity | **Real** |
+| Alarm list | Module 2 detector | **Real** |
+| First timestamps, latching | computed from the recording | **Real** |
+| Data quality (STALE, BAD DATA) | rules on the recording | **Real** (thresholds are our own: 2 s gap, 0.1 m radius, 0.5 m hook, 0–85° angle) |
+| Device chips (bypass, pre-warn, A2B) | `status_word` | **Real** |
+| MANUAL values | slider input | **Simulated.** Radius and hook height come from the boom formulas; pressure from the kit formula; pads, device LMI and status word are not simulated |
+| 3D crane geometry, boom, slew, outriggers | drawn from the sample | **Visual only.** Proportions are approximate, not the Grove drawing |
+| Hook / load position | drawn from the sample | **Visual only.** The hook hangs at the boom tip (the kit does not model rope pay-out) |
+| **Wind sway of the load** | wind speed is real; the lean angle, swing period and direction are **assumed** | **Faked.** Lean grows with wind² (5° at the 36 km/h alert, 7.8° at 45 km/h, capped at 12°), a swing of 60 % of the lean around it with a 5 s period, a smaller cross-wind swing, direction fixed. It is a picture of "wind is strong", not a calculation of wind load |
+| Pads in MANUAL | none | **Not simulated** (shown as "—") |
+
+### 7. Known limits
+
+- The clock plays 1 row = 1 s, so the dropout and the backwards timestamps are not visible in the playback itself. Module 4 finds them from the file in file order (`scanClockFaults`) and marks STALE.
+- `parseCSV` sorts by `ts` and turns blank cells into 0. Module 4 compensates (see section 3), but the real fix is in `parseCSV`.
+- The detector gets one row at a time, so it cannot see a dropout. See the fault list, class C.
