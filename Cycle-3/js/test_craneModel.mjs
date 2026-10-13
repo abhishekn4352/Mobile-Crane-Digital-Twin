@@ -85,7 +85,7 @@ console.log('1. Load chart (Cycle 2 chart, read through Module 3)');
 check('L 38.0 / r 12 -> 47.5 t', ratedCapacity(CHART, 38, 12), 47.5);
 check('L 23.6 / r 8 -> 83.5 t', ratedCapacity(CHART, 23.6, 8), 83.5);
 check('L 52.4 / r 20 -> 23.5 t', ratedCapacity(CHART, 52.4, 20), 23.5);
-check('L 70.0 / r 30 -> 12.4 t', ratedCapacity(CHART, 70, 30), 12.4);
+check('L 70.0 / r 30 -> 12.1 t (PDF p.17)', ratedCapacity(CHART, 70, 30), 12.1);
 approx('interpolated L 30.8 / r 10 -> 60.5 t', ratedCapacity(CHART, 30.8, 10), 60.5);
 approx('interpolated L 38 / r 16 -> 38.1 t', ratedCapacity(CHART, 38, 16), 38.1);
 
