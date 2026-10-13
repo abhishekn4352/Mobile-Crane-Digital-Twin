@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mobile Crane Digital Twin - Cycle 3 simulator</title>
+<!--
+  Cycle 3 simulator page.   Module 4 (Sensor Panel & Alarm UI) owner: Abhishek
+
+  What is on this page, and where each part comes from
+    clock + LIVE/MANUAL mode ...... js/playbackClock.js   (Module 1, Ajit)
+    failure alarms ................ js/failureDetector.js (Module 2, Rushikesh)
+    chart + stability ............. Module 3 js/craneModel.js (over Cycle-2 loadchart.js + stability.js), used through the detector
+    3D crane (view only) .......... js/crane3d.js          (visual layer)
+    panel logic / alarm log ....... js/panelModel.js       (Module 4)
+    panel drawing ................. js/panel.js            (Module 4)
+    data quality (OK/STALE/BAD) ... js/dataQuality.js      (Module 4 helper)
+
+  Run from the repository root:   python -m http.server 8000
+  Open:                           http://localhost:8000/Cycle-3/simulator.html
+-->
+<style>
+:root{
+  --dark-surface:#1c1e22; --surface-2:#24272c; --line:#363a41; --text:#ece7dc; --muted:#9a9ca1;
+  --crane-yellow:#f4b400; --green-ok:#52b77f; --amber:#e3a13a; --red-crit:#e5584f;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--dark-surface);color:var(--text);
+  font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,select,input{font:inherit}
+#app{height:100%;display:grid;grid-template-rows:auto 1fr;min-width:0}
+
+/* ---------- header */
+#top{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--surface-2);flex-wrap:wrap}
+.brand b{display:block;font-size:15px}.brand span{color:var(--muted);font-size:12px}
+.pill{padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;letter-spacing:.03em;border:1px solid var(--line);white-space:nowrap}
+.pill[data-cls="ok"]{background:#1f3a2b;color:#9fe0bb;border-color:#2f6b49}
+.pill[data-cls="warn"]{background:#43330f;color:#f5c970;border-color:#8a6a1e}
+.pill[data-cls="crit"],.pill[data-cls="bad"]{background:#47201d;color:#f4a49e;border-color:#8c3b36}
+.pill[data-cls="mute"]{color:var(--muted)}
+#qdetail{color:var(--muted);font-size:12px;max-width:430px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#qdetail:empty{display:none}
+.clock{margin-left:auto;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.btn{background:var(--crane-yellow);color:#17140a;border:0;border-radius:4px;padding:6px 11px;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn.ghost.on{background:var(--crane-yellow);color:#17140a;border-color:var(--crane-yellow)}
+.btn[hidden]{display:none}
+
+/* ---------- three columns */
+main{display:grid;grid-template-columns:300px minmax(0,1fr) 340px;min-height:0}
+aside{overflow:auto;padding:10px;background:var(--dark-surface);min-height:0}
+#left{border-right:1px solid var(--line)}#right{border-left:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+h3{margin:12px 0 6px;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+h3:first-child{margin-top:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tile{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:6px 9px;min-width:0}
+.tile .k{display:block;color:var(--muted);font-size:11px}
+.tile .v[data-long="1"]{font-size:13px}
+.tile .v{display:block;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .s{display:block;color:var(--muted);font-size:11px;min-height:1.2em}
+.tile.wide{grid-column:1/-1}
+[data-cls="ok"]{color:var(--text)}[data-cls="warn"]{color:var(--amber)}[data-cls="crit"]{color:var(--red-crit)}
+[data-cls="bad"]{color:var(--red-crit);text-decoration:underline wavy}[data-cls="mute"]{color:var(--muted)}
+.bar{height:6px;background:#15171a;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar>i{display:block;height:100%;width:0;background:var(--green-ok)}
+.bar>i[data-cls="warn"]{background:var(--amber)}.bar>i[data-cls="crit"]{background:var(--red-crit)}.bar>i[data-cls="mute"]{background:#555}
+.mm{display:inline-block;margin-left:6px;padding:0 6px;border-radius:3px;background:#43330f;color:#f5c970;font-size:11px;font-weight:700}
+.mm[hidden]{display:none}
+.pads{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pads .tile .v{font-size:16px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:3px 8px;border-radius:4px;border:1px solid var(--line);color:var(--muted);font-size:11px;font-weight:700}
+.chip[data-on="1"]{background:#43330f;color:#f5c970;border-color:#8a6a1e}
+.chip[data-on="na"]{opacity:.35}
+
+/* ---------- centre: 3D view + dock */
+#stage{display:grid;grid-template-rows:minmax(0,1fr) auto;min-width:0;min-height:0}
+#view{position:relative;min-height:0;background:#aec8de}
+#view canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#view .note{position:absolute;left:8px;top:8px;background:rgba(28,30,34,.88);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font-size:11px;color:var(--muted)}
+#dock{border-top:1px solid var(--line);background:var(--surface-2);padding:8px 12px 10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+#scrub{flex:1;min-width:140px;accent-color:var(--crane-yellow)}
+select{background:var(--dark-surface);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:5px}
+.sliders{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 16px}
+.sl label{display:flex;justify-content:space-between;color:var(--muted);font-size:12px}
+.sl label b{color:var(--text);font-variant-numeric:tabular-nums}
+.sl input[type=range]{width:100%;accent-color:var(--crane-yellow);margin:0}
+.hint{color:var(--muted);font-size:11px;margin:2px 0 6px}
+#app[data-mode="MANUAL"] #dock{box-shadow:inset 0 3px 0 var(--amber)}
+
+/* ---------- right: banner + alarms */
+#banner{border:1px solid var(--line);border-left-width:6px;border-radius:6px;padding:8px 10px;background:var(--surface-2)}
+#banner[data-cls="ok"]{border-left-color:var(--green-ok)}#banner[data-cls="warn"]{border-left-color:var(--amber)}
+#banner[data-cls="crit"]{border-left-color:var(--red-crit)}#banner[data-cls="mute"]{border-left-color:var(--line)}
+#banner .l{font-weight:800;font-size:15px}#banner .r{color:var(--muted);font-size:12px;margin-top:2px}
+.counts{display:flex;gap:6px}
+.counts div{flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;text-align:center}
+.counts b{display:block;font-size:18px}.counts span{font-size:11px;color:var(--muted)}
+.counts .c b{color:var(--red-crit)}.counts .w b{color:var(--amber)}.counts .d b{color:#8ab4d8}
+#alarms{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:60px;flex:1}
+.alarm{border:1px solid var(--line);border-left-width:5px;border-radius:5px;padding:6px 8px;background:var(--surface-2)}
+.alarm.sev-critical{border-left-color:var(--red-crit)}.alarm.sev-warning{border-left-color:var(--amber)}.alarm.sev-data{border-left-color:#6e93b8}
+.alarm.is-cleared{opacity:.5}
+.alarm.empty{color:var(--muted);border-left-color:var(--line)}
+.a-head{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.a-type{font-weight:800;font-size:13px}
+.a-tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:10px;font-weight:700;padding:0 5px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.tag.sim{background:#43330f;color:#f5c970;border-color:#8a6a1e}
+.alarm.is-active .tag.state{background:#47201d;color:#f4a49e;border-color:#8c3b36}
+.a-meta{display:flex;gap:10px;font-size:12px;margin-top:2px;font-variant-numeric:tabular-nums}
+.a-val{font-weight:700}.a-since{color:var(--muted)}
+.a-rule{font-size:11px;color:var(--muted);margin-top:2px}
+.a-note{font-size:11px;color:#8ab4d8;margin-top:2px}
+details{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px}
+details summary{cursor:pointer;color:var(--muted)}
+details ul{margin:6px 0 0;padding-left:16px;color:var(--muted)}
+
+#err{display:none;position:fixed;left:50%;top:30%;transform:translateX(-50%);max-width:520px;z-index:20;background:var(--surface-2);border:1px solid var(--red-crit);border-radius:6px;padding:10px 14px}
+
+@media (max-width:1100px){
+  html,body{overflow:auto}
+  #app{height:auto}
+  main{grid-template-columns:1fr}
+  #view{height:56vh}
+  aside{border:0!important}
+}
+</style></head><body>
+
+<div id="app" data-mode="LIVE">
+  <header id="top">
+    <div class="brand"><b>Mobile crane digital twin</b><span>Cycle 3 · sensor panel &amp; alarm UI</span></div>
+    <span class="pill" data-f="mode" data-cls="ok" title="LIVE: the page follows the telemetry. MANUAL: you control the crane with the sliders.">LIVE (telemetry)</span>
+    <span class="pill" data-f="quality" data-cls="mute" title="OK / STALE (dropout, repeated timestamp) / BAD DATA (impossible row)">DATA OK</span>
+    <span id="qdetail" data-f="qualityDetail"></span>
+    <button class="btn" data-return-live hidden>Return to LIVE</button>
+    <div class="clock" data-f="time" title="Timestamp (ts) of the sample on screen">--:--:--</div>
+  </header>
+
+  <main>
+    <!-- ================= left: sensors ================= -->
+    <aside id="left">
+      <h3>Sensors</h3>
+      <div class="grid2">
+        <div class="tile"><span class="k">Load</span><span class="v" data-f="load">—</span></div>
+        <div class="tile"><span class="k">Wind</span><span class="v" data-f="wind">—</span></div>
+        <div class="tile"><span class="k">Boom angle</span><span class="v" data-f="boomAngle">—</span></div>
+        <div class="tile"><span class="k">Boom length</span><span class="v" data-f="boomLength">—</span></div>
+        <div class="tile"><span class="k">Radius</span><span class="v" data-f="radius">—</span></div>
+        <div class="tile"><span class="k">Slew</span><span class="v" data-f="slew">—</span></div>
+        <div class="tile"><span class="k">Outriggers</span><span class="v" data-f="outrigger" style="font-size:14px">—</span></div>
+        <div class="tile"><span class="k">Hydraulic pressure</span><span class="v" data-f="pressure">—</span><span class="s" data-f="pressureSub"></span></div>
+      </div>
+
+      <h3>Load chart &amp; stability</h3>
+      <div class="grid2">
+        <div class="tile"><span class="k">Rated capacity</span><span class="v" data-f="capacity">—</span><span class="s" data-f="capacitySub"></span></div>
+        <div class="tile"><span class="k">Utilisation</span><span class="v" data-f="utilisation">—</span>
+          <div class="bar"><i data-f="utilFill" data-cls="ok"></i></div></div>
+        <div class="tile"><span class="k">Stability</span><span class="v" data-f="stability">—</span><span class="s" data-f="stabilitySub"></span></div>
+        <div class="tile"><span class="k">LMI device · chart <span class="mm" data-f="lmiMismatch" hidden>MISMATCH</span></span>
+          <span class="v" style="font-size:14px"><span data-f="lmiDevice">—</span></span><span class="s">chart: <span data-f="lmiChart">—</span></span></div>
+      </div>
+
+      <h3>Pad reactions (telemetry)</h3>
+      <div class="pads">
+        <div class="tile"><span class="k">Front left</span><span class="v" data-f="padFL">—</span></div>
+        <div class="tile"><span class="k">Front right</span><span class="v" data-f="padFR">—</span></div>
+        <div class="tile"><span class="k">Rear left</span><span class="v" data-f="padRL">—</span></div>
+        <div class="tile"><span class="k">Rear right</span><span class="v" data-f="padRR">—</span></div>
+      </div>
+      <div class="hint" data-f="padNote"></div>
+
+      <h3>Device status</h3>
+      <div class="chips">
+        <span class="chip" data-chip="wind" data-on="0">WIND ALERT</span>
+        <span class="chip" data-chip="bypass" data-on="0">LMI BYPASS</span>
+        <span class="chip" data-chip="prewarn" data-on="0">LMI PRE-WARN</span>
+        <span class="chip" data-chip="a2b" data-on="0">A2B</span>
+      </div>
+    </aside>
+
+    <!-- ================= centre: 3D + controls ================= -->
+    <section id="stage">
+      <div id="view"><div class="note" title="The wind speed is real (CSV). The size, period and direction of the sway are illustrative only.">3D view · drag to orbit · scroll to zoom · load sway = wind (visual only)</div></div>
+      <div id="dock">
+        <div class="row">
+          <button class="btn" id="b_play">Play</button>
+          <span id="rates"></span>
+          <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in the recording">
+          <select id="jump" aria-label="Jump to a moment"></select>
+        </div>
+        <div class="hint">LIVE: the sliders show the incoming telemetry. Touch a slider to switch to MANUAL (override); the badge turns amber and alarms are labelled SIMULATED.</div>
+        <div class="sliders">
+          <div class="sl"><label>Load <b data-slider-val="load">-</b></label><input type="range" data-slider="load" min="0" max="60" step="0.1" value="0"></div>
+          <div class="sl"><label>Boom length <b data-slider-val="boomLength">-</b></label><input type="range" data-slider="boomLength" min="23.35" max="53.35" step="0.1" value="32"></div>
+          <div class="sl"><label>Boom angle <b data-slider-val="boomAngle">-</b></label><input type="range" data-slider="boomAngle" min="5" max="85" step="0.1" value="65"></div>
+          <div class="sl"><label>Slew <b data-slider-val="slew">-</b></label><input type="range" data-slider="slew" min="-180" max="180" step="1" value="0"></div>
+          <div class="sl"><label>Wind <b data-slider-val="wind">-</b></label><input type="range" data-slider="wind" min="0" max="60" step="1" value="11"></div>
+          <div class="sl"><label>Outriggers</label>
+            <select data-outriggers style="width:100%"><option value="DEPLOYED">DEPLOYED</option><option value="RETRACTED">RETRACTED</option></select></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= right: alarms ================= -->
+    <aside id="right">
+      <div id="banner" data-f="banner" data-cls="mute" aria-live="polite">
+        <div class="l" data-f="bannerLabel" data-cls="mute">NO DATA</div>
+        <div class="r" data-f="bannerReason"></div>
+      </div>
+      <div class="counts">
+        <div class="c"><b data-f="countCritical">0</b><span>critical</span></div>
+        <div class="w"><b data-f="countWarning">0</b><span>warning</span></div>
+        <div class="d"><b data-f="countData">0</b><span>data</span></div>
+      </div>
+      <h3 style="margin:0">Alarms · latched, first timestamp</h3>
+      <ul id="alarms" data-f="alarms"></ul>
+      <details id="clockFaults"><summary>Clock faults in the CSV (file order)</summary><ul id="clockList"></ul></details>
+    </aside>
+  </main>
+</div>
+
+<div id="err"></div>
+<script>
+  // Shows any script problem on the page instead of leaving a silent blank screen.
+  window.showErr = function (html) { var e = document.getElementById('err'); e.style.display = 'block'; e.innerHTML += '<div>' + html + '</div>'; };
+  window.addEventListener('error', function (ev) { if (/missing modules|three\.js missing/.test(ev.message)) return; window.showErr('Script error: ' + ev.message); });
+  window.addEventListener('unhandledrejection', function (ev) { window.showErr('Error: ' + ((ev.reason && ev.reason.message) || ev.reason)); });
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+function fail(msg) { window.showErr(msg); }
+
+if (typeof THREE === 'undefined') {
+  fail('three.js did not load from cdnjs.cloudflare.com. Check the internet connection or any ad-blocker / Brave Shields, then reload.');
+  throw new Error('three.js missing');
+}
+const T = THREE;
+
+// The page needs these files from the repository. They are loaded one by one so a
+// missing file is named on screen instead of leaving a blank page.
+const missing = [];
+const need = async (path) => { try { return await import(path); } catch (e) { console.error(path, e); missing.push(path); return {}; } };
+const { parseCSV, PlaybackClock, PLAYBACK_RATES } = await need('./js/playbackClock.js');
+const { detectFailures, expectedHydraulicPressure } = await need('./js/failureDetector.js');
+const { createCrane3D, createGroundOverlay, buildOutriggerTimeline, poseFromSample } = await need('./js/crane3d.js');
+const { loadGroundPosition, supportPolygon } = await need('./js/craneModel.js');   // Module 3: the one source of kit geometry
+const { PanelSession, manualSampleFromControls, controlsFromSample, MODE } = await need('./js/panelModel.js');
+const { createSensorPanel } = await need('./js/panel.js');
+const { scanClockFaults } = await need('./js/dataQuality.js');
+if (missing.length) {
+  fail('Missing or broken file(s):<br><code>' + missing.join('</code><br><code>') + '</code><br>Serve the <b>repository root</b> (<code>python -m http.server 8000</code> run inside the repo folder) and open <code>/Cycle-3/simulator.html</code>.');
+  throw new Error('missing modules: ' + missing.join(', '));
+}
+
+// Kit outrigger layout: 7.8 m along the carrier (x), 8.9 m sideways (z).
+const POLYGON = supportPolygon();
+
+
+// ---------------------------------------------------------------- 3D scene
+const view = $('view');
+const R = new T.WebGLRenderer({ antialias: true });
+R.setPixelRatio(Math.min(devicePixelRatio, 2));
+R.shadowMap.enabled = true; R.shadowMap.type = T.PCFSoftShadowMap;
+R.outputEncoding = T.sRGBEncoding; R.toneMapping = T.ACESFilmicToneMapping; R.toneMappingExposure = 1.1;
+view.prepend(R.domElement);
+
+const S = new T.Scene();
+S.background = new T.Color(0xaec8de);
+S.fog = new T.Fog(0xaec8de, 230, 520);
+const C = new T.PerspectiveCamera(36, 1, .5, 700);
+S.add(new T.HemisphereLight(0xdfeaff, 0x6b5d4a, 1.1));
+const D = new T.DirectionalLight(0xfff0d8, 1.9);
+D.position.set(40, 70, 30); D.castShadow = true; D.shadow.mapSize.set(2048, 2048);
+Object.assign(D.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 220 });
+D.shadow.bias = -.0004; S.add(D);
+const D2 = new T.DirectionalLight(0x9fb8ff, .7); D2.position.set(-30, 20, -25); S.add(D2);
+
+const ground = new T.Mesh(new T.CircleGeometry(320, 72), new T.MeshStandardMaterial({ color: 0x5e5a50, roughness: .95 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; S.add(ground);
+const pad = new T.Mesh(new T.CircleGeometry(60, 64), new T.MeshStandardMaterial({ color: 0x8a7557, roughness: 1 }));
+pad.rotation.x = -Math.PI / 2; pad.position.y = .02; pad.receiveShadow = true; S.add(pad);
+
+const crane = createCrane3D(T, S, { padHalfX: POLYGON[1].x, padHalfZ: POLYGON[2].z });
+const overlay = createGroundOverlay(T, S, POLYGON);
+
+// orbit camera
+const tg = new T.Vector3(0, 22, 0);
+let th = .75, ph = 1.2, r = 135, rT = 135, auto = false;
+const P = new Map();
+R.domElement.onpointerdown = (e) => { R.domElement.setPointerCapture(e.pointerId); P.set(e.pointerId, e); };
+R.domElement.onpointerup = R.domElement.onpointercancel = (e) => P.delete(e.pointerId);
+R.domElement.onpointermove = (e) => {
+  const o = P.get(e.pointerId); if (!o) return;
+  if (P.size === 1) { th -= (e.clientX - o.clientX) * .006; ph = Math.min(1.5, Math.max(.12, ph - (e.clientY - o.clientY) * .006)); }
+  P.set(e.pointerId, e);
+};
+R.domElement.addEventListener('wheel', (e) => { e.preventDefault(); rT = Math.min(230, Math.max(12, rT * Math.exp(e.deltaY * .001))); }, { passive: false });
+function size() {
+  const w = Math.max(view.clientWidth, 1), h = Math.max(view.clientHeight, 1);
+  R.setSize(w, h, false); C.aspect = w / h; C.updateProjectionMatrix();
+}
+new ResizeObserver(size).observe(view); size();
+
+function loop(n) {
+  requestAnimationFrame(loop);
+  r += (rT - r) * .06;
+  C.position.set(tg.x + r * Math.sin(ph) * Math.cos(th), tg.y + r * Math.cos(ph), tg.z + r * Math.sin(ph) * Math.sin(th));
+  C.lookAt(tg);
+  crane.tick(n / 1000);                 // wind sway animation: screen time only, never used as telemetry time
+  R.render(S, C);
+  if (clock) syncControls();
+}
+requestAnimationFrame(loop);
+
+
+// ---------------------------------------------------------------- telemetry + panel
+let clock = null, rows = null, timeline = null, session = null, panel = null, baseSample = null, scrubbing = false;
+
+function present(vm, sample, mode) {
+  panel.render(vm);
+  if (mode === MODE.LIVE) panel.setSliders(controlsFromSample(sample));   // LIVE: sliders mirror the telemetry
+
+  crane.setPose(poseFromSample(sample, timeline));
+  const g = loadGroundPosition(sample.radius_m, sample.slew_deg);
+  if (Number.isFinite(g.x) && Number.isFinite(g.z)) overlay.setLoadPoint(g.x, g.z);
+  overlay.setPolygonColor(vm.stability.cls === 'crit' ? 0xe5584f : 0xf4b400);
+}
+
+function onClock(sample, clk) {
+  const vm = clk.mode === MODE.MANUAL
+    ? session.manualUpdate(sample)
+    : session.liveUpdate(clk.currentIndex, clk.playing);
+  present(vm, sample, clk.mode);
+}
+
+/** A slider was touched: switch to MANUAL (if not already) and publish the override sample. */
+function manualInput(controls) {
+  if (clock.mode !== MODE.MANUAL) {
+    baseSample = clock.currentTelemetrySample;          // keeps ts and unit_id of the moment we left LIVE
+    clock.setManual();
+  }
+  clock.pushManualSample(manualSampleFromControls(baseSample, controls, { expectedPressure: expectedHydraulicPressure }));
+}
+
+function returnToLive() {
+  clock.setLive();                                      // resumes playback from the current position
+  const i = clock.currentIndex;
+  const vm = session.liveUpdate(i, false);
+  present(vm, rows[i], MODE.LIVE);
+}
+
+function jumpToTs(ts) {
+  if (clock.mode === MODE.MANUAL) clock.setLive();      // leaving MANUAL; jumpTo() pauses right after
+  clock.jumpTo(ts);
+}
+
+function syncControls() {
+  $('b_play').textContent = clock.playing ? 'Pause' : 'Play';
+  if (!scrubbing && clock.mode === MODE.LIVE) $('scrub').value = clock.currentIndex;
+  document.querySelectorAll('#rates button').forEach((b) => b.classList.toggle('on', +b.dataset.rate === clock.rate));
+}
+
+async function start() {
+  let text;
+  try {
+    const res = await fetch('./data/mobile-telemetry-2026-09-16.csv');
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    text = await res.text();
+  } catch (e) {
+    fail('Could not load <code>data/mobile-telemetry-2026-09-16.csv</code> (' + e.message + ').<br>Run <code>python -m http.server 8000</code> in the repository root and open <code>http://localhost:8000/Cycle-3/simulator.html</code>.');
+    return;
+  }
+  rows = parseCSV(text);
+  timeline = buildOutriggerTimeline(rows);
+  session = new PanelSession(rows, { detect: detectFailures, expectedPressure: expectedHydraulicPressure });
+  panel = createSensorPanel($('app'), { onManualInput: manualInput, onReturnLive: returnToLive });
+  clock = new PlaybackClock(rows, onClock);
+  clock.setRate(10);
+
+  // clock faults in FILE order (parseCSV sorts by ts, which hides a clock that steps back)
+  const faults = scanClockFaults(text);
+  const list = $('clockList');
+  const hms = (ts) => ts.slice(11, 19);
+  faults.forEach((f) => {
+    const li = document.createElement('li');
+    li.textContent = f.kind === 'GAP' ? `line ${f.line}: ${f.seconds} s gap, ${hms(f.prevTs)} to ${hms(f.ts)} (${f.seconds - 1} s missing)`
+      : f.kind === 'BACKWARDS' ? `line ${f.line}: clock went back ${-f.seconds} s, ${hms(f.prevTs)} to ${hms(f.ts)}`
+        : `line ${f.line}: timestamp ${hms(f.ts)} repeated`;
+    list.appendChild(li);
+  });
+  if (!faults.length) list.appendChild(Object.assign(document.createElement('li'), { textContent: 'none' }));
+
+  // controls
+  PLAYBACK_RATES.forEach((rate) => {
+    const b = document.createElement('button'); b.className = 'btn ghost'; b.dataset.rate = rate; b.textContent = rate + '×';
+    b.onclick = () => clock.setRate(rate); $('rates').appendChild(b);
+  });
+  $('b_play').onclick = () => { if (clock.mode === MODE.MANUAL) returnToLive(); else clock.togglePlay(); };
+  const scrub = $('scrub'); scrub.max = clock.totalRows - 1;
+  scrub.onpointerdown = () => { scrubbing = true; };
+  scrub.onpointerup = () => { scrubbing = false; };
+  scrub.oninput = () => jumpToTs(rows[+scrub.value].ts);
+
+  const jump = $('jump');
+  const group = (label) => { const g = document.createElement('optgroup'); g.label = label; jump.appendChild(g); return g; };
+  const add = (g, hmsText, why) => {
+    const x = rows.find((q) => q.ts.includes('T' + hmsText));
+    if (!x) return;
+    const o = document.createElement('option'); o.value = x.ts; o.textContent = hmsText + '  ' + why; g.appendChild(o);
+  };
+  jump.appendChild(new Option('Jump to…', ''));
+  let g = group('Real failures');
+  add(g, '07:03:00', 'hoist while outriggers still DEPLOYING');
+  add(g, '09:00:00', 'overload 109 %');
+  add(g, '09:50:00', 'overload; device LMI says 78 %');
+  add(g, '10:25:27', 'pad FL almost off the ground');
+  add(g, '11:02:00', 'overload 132 % + hydraulic pressure loss');
+  add(g, '12:18:40', 'load on a combination the chart does not permit');
+  g = group('Device conditions');
+  add(g, '12:30:10', 'wind alert 45 km/h (load sways)');
+  add(g, '14:00:10', 'LMI bypass key active');
+  add(g, '14:10:00', 'LMI pre-warning 90 %+');
+  g = group('Impossible rows (BAD DATA)');
+  add(g, '14:30:00', 'radius 40 m, boom says 14 m');
+  add(g, '15:00:00', 'boom 70 m');
+  add(g, '15:30:00', 'load -3 t, pads 0');
+  add(g, '17:00:00', 'boom angle 95°');
+  g = group('Missing / repeated data (STALE)');
+  add(g, '15:25:00', 'after the 15:20–15:25 dropout');
+  add(g, '16:00:02', 'after the clock jump');
+  jump.onchange = () => { if (jump.value) jumpToTs(jump.value); jump.selectedIndex = 0; };
+
+  window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, session, panel, manualInput, returnToLive, jumpToTs, faults,
+    cam: { target: tg, set(dist, theta, phi) { rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
+  onClock(clock.currentTelemetrySample, clock);
+}
+start();
+</script>
+</body></html>
