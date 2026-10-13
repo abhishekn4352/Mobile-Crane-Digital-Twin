@@ -94,15 +94,14 @@ const missing = [];
 const need = async (path) => { try { return await import(path); } catch (e) { console.error(path, e); missing.push(path); return {}; } };
 const { parseCSV, PlaybackClock, PLAYBACK_RATES } = await need('./js/playbackClock.js');
 const { createCrane3D, createGroundOverlay, buildOutriggerTimeline, poseFromSample } = await need('./js/crane3d.js');
-const { loadGroundPosition, outriggerPolygonForSpread } = await need('../Cycle-2/js/stability.js');
+const { loadGroundPosition, supportPolygon } = await need('./js/craneModel.js');   // Module 3: the one source of kit geometry
 if (missing.length) {
   fail('Missing or broken file(s):<br><code>' + missing.join('</code><br><code>') + '</code><br>Serve the <b>repository root</b> (<code>python -m http.server 8000</code> run inside the repo folder) and open <code>/Cycle-3/crane3d-demo.html</code>, or use the stand-alone bundle that already contains these files.');
   throw new Error('missing modules: ' + missing.join(', '));
 }
 
-// Kit outrigger layout: 7.8 m along the carrier (x), 8.9 m sideways (z).
-const SPREAD_X_M = 7.8, SPREAD_Z_M = 8.9;
-const POLYGON = outriggerPolygonForSpread(SPREAD_X_M, SPREAD_Z_M);
+// Kit outrigger layout (pads at +-3.9 m, +-4.45 m) comes from Module 3, not from a private copy.
+const POLYGON = supportPolygon();
 
 
 // ---------------------------------------------------------------- scene
