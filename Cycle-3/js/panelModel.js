@@ -80,12 +80,12 @@ export function deviceLmiPct(sample) {
 
 /**
  * The detector's pad checks need four finite pad readings on a DEPLOYED crane. A MANUAL sample has
- * no pad model, so the detector is given an even split of (170 t kit + load): finite and balanced,
+ * no pad model, so the detector is given an even split of (kit mass + load): finite and balanced,
  * so the pad checks stay silent. The panel never shows these numbers (pads read "not simulated").
  */
 function withNeutralPads(sample) {
   if (!fin(sample.load_t)) return sample;
-  const each = (170 + sample.load_t) / 4;
+  const each = (KIT.MACHINE_MASS_T + sample.load_t) / 4;
   return { ...sample, pad_fl_t: each, pad_fr_t: each, pad_rl_t: each, pad_rr_t: each };
 }
 
@@ -176,7 +176,9 @@ export function analyseSample(sample, prev, deps, opts = {}) {
     if (f.type === 'LMI_DIVERGENCE' && fin(f.triggerValue) && fin(f.limit)) {
       rule = `device LMI ${fmt(f.triggerValue)} % but the chart gives ${fmt(f.limit)} % (tolerance ${LMI_TOLERANCE_PCT} points)`;
     } else if (f.type === 'LMI_DIVERGENCE') {
-      rule = `device LMI is ${fin(f.triggerValue) ? fmt(f.triggerValue) + ' %' : 'blank'} but the chart ${lmi.computedPct === null ? 'has no capacity' : 'gives ' + fmt(lmi.computedPct) + ' %'}`;
+      rule = fin(f.triggerValue)
+        ? `device LMI ${fmt(f.triggerValue)} % but the chart has no capacity for this boom and radius`
+        : `device LMI is blank but the chart has a capacity of ${fmt(capacity.t)} t for this boom and radius`;
     }
     raised.push({
       kind: DEVICE_TYPES.has(f.type) ? 'device' : 'failure', type: f.type,
