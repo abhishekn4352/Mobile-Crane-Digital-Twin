@@ -97,7 +97,7 @@ check('boom_length_m value', rows[0].boom_length_m, 32.0);
 check('outrigger_state is string', typeof rows[0].outrigger_state, 'string');
 check('outrigger_state value', rows[0].outrigger_state, 'DEPLOYED');
 
-section('parseCSV — timestamp sort (out-of-order input)');
+section('parseCSV — timestamp sort (out-of-order input) + fileOrder preserved');
 
 const UNSORTED_CSV = [
   'ts,load_t',
@@ -107,9 +107,15 @@ const UNSORTED_CSV = [
 ].join('\n');
 
 const sorted = parseCSV(UNSORTED_CSV);
+// Sorted playback order
 check('sorted row 0 ts', sorted[0].ts, '2026-09-16T07:00:00+05:30');
 check('sorted row 1 ts', sorted[1].ts, '2026-09-16T07:00:01+05:30');
 check('sorted row 2 ts', sorted[2].ts, '2026-09-16T07:00:02+05:30');
+// GAP FIX 2: fileOrder must preserve original file sequence
+checkTrue('fileOrder exists on result', Array.isArray(sorted.fileOrder));
+check('fileOrder row 0 ts (original first)', sorted.fileOrder[0].ts, '2026-09-16T07:00:02+05:30');
+check('fileOrder row 1 ts (original second)', sorted.fileOrder[1].ts, '2026-09-16T07:00:00+05:30');
+check('fileOrder row 2 ts (original third)', sorted.fileOrder[2].ts, '2026-09-16T07:00:01+05:30');
 
 section('parseCSV — blank lines skipped');
 
@@ -133,6 +139,21 @@ const NAN_CSV = [
 
 const nanRows = parseCSV(NAN_CSV);
 checkTrue('NaN for bad numeric', Number.isNaN(nanRows[0].load_t));
+
+// GAP FIX 1: blank cell must become NaN (not 0)
+// Number('') === 0 in JS, which caused 109 false LMI_DIVERGENCE alarms
+section('parseCSV — GAP FIX 1: blank cell becomes NaN not 0');
+
+const BLANK_NUMERIC_CSV = [
+  'ts,load_t,lmi_pct',
+  '2026-09-16T07:00:00+05:30,10,',   // lmi_pct intentionally blank
+  '2026-09-16T07:00:01+05:30,10,55', // lmi_pct present
+].join('\n');
+
+const blankRows = parseCSV(BLANK_NUMERIC_CSV);
+checkTrue('blank lmi_pct is NaN (not 0)', Number.isNaN(blankRows[0].lmi_pct));
+check('present lmi_pct is a number', blankRows[1].lmi_pct, 55);
+check('non-blank load_t unaffected', blankRows[0].load_t, 10);
 
 section('parseCSV — error handling');
 
@@ -301,10 +322,61 @@ check('auto-stopped at end of recording', endClock.playing, false);
 
 
 // ============================================================
-// SECTION 7 — destroy
+// SECTION 7 — GAP FIX 3: ts-driven clock (dropout handling)
 // ============================================================
 
-section('PlaybackClock — destroy');
+section('PlaybackClock \u2014 GAP FIX 3: ts-driven clock steps across real gaps');
+
+// Simulate a recording with a 300-second dropout:
+//   row 0: 07:00:00
+//   row 1: 07:00:01   (normal 1 s gap)
+//   row 2: 07:05:01   (300 s gap = simulated dropout)
+//   row 3: 07:05:02
+const DROPOUT_CSV = [
+  'ts,load_t',
+  '2026-09-16T07:00:00+05:30,1',
+  '2026-09-16T07:00:01+05:30,2',
+  '2026-09-16T07:05:01+05:30,3',  // 300 s gap
+  '2026-09-16T07:05:02+05:30,4',
+].join('\n');
+
+const dropoutRows = parseCSV(DROPOUT_CSV);
+const gapClock    = new PlaybackClock(dropoutRows, () => {});
+
+// Manually advance the internal accumulator by 1001 ms (> 1 s gap)
+// and call _tick() in test mode (no real timer). Clock should advance
+// from row 0 \u2192 row 1, but NOT jump across the 300-second gap yet.
+gapClock._lastTime = gapClock._now();
+gapClock._playing  = true;
+gapClock.playing   = true;
+gapClock._accumMs  = 1001;   // just over 1 s of simulated time
+gapClock._tick();
+
+check('ts-driven: after 1001 ms accumulator, index moved to row 1', gapClock.currentIndex, 1);
+
+// Now advance by 300001 ms (> 300 s) — should jump all the way to row 2
+gapClock._playing  = true;
+gapClock.playing   = true;
+gapClock._accumMs  = 300001;
+gapClock._tick();
+
+check('ts-driven: after 300001 ms accumulator, index jumped across dropout to row 2', gapClock.currentIndex, 2);
+
+// Verify that a 1 s accumulator only moves 1 row from row 2 \u2192 row 3
+gapClock._playing  = true;
+gapClock.playing   = true;
+gapClock._accumMs  = 1001;
+gapClock._tick();
+
+check('ts-driven: normal 1 s step from row 2 \u2192 row 3', gapClock.currentIndex, 3);
+check('ts-driven: auto-stopped at last row', gapClock.playing, false);
+
+
+// ============================================================
+// SECTION 8 — destroy
+// ============================================================
+
+section('PlaybackClock \u2014 destroy');
 
 const dClock = new PlaybackClock(SAMPLE_ROWS, () => {});
 dClock.destroy();

@@ -48,8 +48,17 @@ const NUMERIC_FIELDS = [
 // CSV Parser
 //
 // Accepts raw CSV text (string).
-// Returns an array of telemetry objects, sorted by ts ascending.
+// Returns an object with two arrays:
+//   .rows      — sorted by ts ascending (used by the playback clock)
+//   .fileOrder — rows in the original file order (used by clock-fault
+//                detection to find backwards/duplicate timestamps)
 // Throws if the file is empty or has no data rows.
+//
+// Fix (blank → NaN): a blank numeric cell is stored as NaN, not 0.
+// Number('') === 0 is a JS gotcha; we guard against it explicitly so
+// that a blank lmi_pct does not look like "device LMI 0 %" to the
+// Failure Detector (which would generate 109 false LMI_DIVERGENCE rows
+// in the 12:18–12:19 window where the chart has no capacity).
 // ------------------------------------------------------------
 
 export function parseCSV(csvText) {
@@ -66,7 +75,7 @@ export function parseCSV(csvText) {
 
   const headers = lines[0].split(',').map(h => h.trim());
 
-  const rows = [];
+  const fileOrder = [];
 
   for (let i = 1; i < lines.length; i++) {
 
@@ -82,7 +91,10 @@ export function parseCSV(csvText) {
     headers.forEach((header, idx) => {
       const raw = values[idx] !== undefined ? values[idx].trim() : '';
       if (NUMERIC_FIELDS.includes(header)) {
-        const n = Number(raw);
+        // GAP FIX 1: blank cell must become NaN, not 0.
+        // Number('') === 0 in JavaScript, which is misleading for optional
+        // fields like lmi_pct that are intentionally left blank by the device.
+        const n = raw === '' ? NaN : Number(raw);
         row[header] = Number.isFinite(n) ? n : NaN;
       } else {
         row[header] = raw;
@@ -92,15 +104,30 @@ export function parseCSV(csvText) {
     // Validate required field
     if (!row.ts) continue;
 
-    rows.push(row);
+    fileOrder.push(row);
   }
 
-  if (rows.length === 0) {
+  if (fileOrder.length === 0) {
     throw new Error('parseCSV: no valid telemetry rows found after parsing');
   }
 
-  // Sort ascending by timestamp string — ISO 8601 sorts lexicographically
-  rows.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+  // GAP FIX 2: keep the original file order separately so clock-fault
+  // detection (Module 4 dataQuality.js, and the clock itself) can see
+  // backwards / duplicate timestamps before they are hidden by sorting.
+  // The playback clock uses the sorted copy; fault detection uses fileOrder.
+  const rows = fileOrder.slice().sort(
+    (a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)
+  );
+
+  // Attach fileOrder as a non-enumerable property so the return value
+  // is still array-compatible (length, indexing) while carrying the
+  // unsorted sequence for callers that need it.
+  Object.defineProperty(rows, 'fileOrder', {
+    value: fileOrder,
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
 
   return rows;
 }
@@ -154,8 +181,15 @@ export class PlaybackClock {
     // at which the last frame was processed.
     this._lastTime = null;
 
-    // Accumulated fractional seconds carried across frames
-    this._accumSec = 0;
+    // GAP FIX 3 (ts-driven clock): Instead of assuming every row
+    // represents exactly 1 simulated second, we advance by the actual
+    // difference between consecutive ts values.  This means:
+    //   - a 300-row dropout (15:20:00–15:24:59) causes the clock to
+    //     skip 300 s in one step, making the gap visible in playback.
+    //   - the clock is correct even if the recording density changes.
+    // _accumMs tracks fractional milliseconds of simulated time that
+    // have not yet been consumed by a row advance.
+    this._accumMs  = 0;
 
     // Animation frame handle (browser) or interval handle (Node)
     this._handle   = null;
@@ -181,7 +215,7 @@ export class PlaybackClock {
     this._playing = true;
     this.playing  = true;
     this._lastTime = this._now();
-    this._accumSec = 0;
+    this._accumMs  = 0;
     this._scheduleNext();
   }
 
@@ -217,7 +251,7 @@ export class PlaybackClock {
     this.pause();
     const idx = this._rows.findIndex(r => r.ts >= targetTs);
     this._index = idx === -1 ? this._rows.length - 1 : idx;
-    this._accumSec = 0;
+    this._accumMs  = 0;
     this._publish();
   }
 
@@ -225,7 +259,7 @@ export class PlaybackClock {
   reset() {
     this.pause();
     this._index    = 0;
-    this._accumSec = 0;
+    this._accumMs  = 0;
     this._publish();
   }
 
@@ -328,19 +362,39 @@ export class PlaybackClock {
     const deltaMs = now - this._lastTime;
     this._lastTime = now;
 
-    // Convert elapsed wall time → simulated seconds at the current rate.
-    // Cap the delta to 200 ms to prevent a huge jump if the browser tab
-    // was backgrounded or the computer was sleeping.
-    const deltaSimSec = Math.min(deltaMs, 200) / 1000 * this._rate;
-    this._accumSec += deltaSimSec;
+    // GAP FIX 3 (ts-driven clock):
+    // Convert elapsed wall time → simulated milliseconds at the current rate.
+    // Cap the raw delta to 200 ms so a backgrounded tab or sleeping computer
+    // does not cause a massive single-frame jump in wall time.
+    const deltaSimMs = Math.min(deltaMs, 200) * this._rate;
+    this._accumMs += deltaSimMs;
 
-    // Step forward by as many 1-second rows as simulated time has advanced.
-    // The CSV records at 1 sample per second, so each row = 1 simulated second.
-    const steps = Math.floor(this._accumSec);
-    this._accumSec -= steps;
+    // Step forward using the ACTUAL timestamp gap between consecutive rows
+    // instead of assuming every row = 1 s.  This makes the playback clock
+    // honour real dropout intervals (e.g. the 300-row / 300-second gap at
+    // 15:20:00–15:24:59) so downstream modules see the correct elapsed time.
+    let published = false;
+    while (this._index < this._rows.length - 1) {
+      const curr = this._rows[this._index];
+      const next = this._rows[this._index + 1];
 
-    if (steps > 0) {
-      this._index = Math.min(this._index + steps, this._rows.length - 1);
+      // Gap between this row and the next, in simulated milliseconds.
+      // If timestamps are malformed, fall back to 1000 ms (1 s).
+      const tsGapMs = (() => {
+        const d = Date.parse(next.ts) - Date.parse(curr.ts);
+        return Number.isFinite(d) && d > 0 ? d : 1000;
+      })();
+
+      if (this._accumMs >= tsGapMs) {
+        this._accumMs -= tsGapMs;
+        this._index++;
+        published = true;
+      } else {
+        break;
+      }
+    }
+
+    if (published) {
       this._publish();
     }
 
