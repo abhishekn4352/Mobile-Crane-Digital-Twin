@@ -134,7 +134,8 @@ console.log('\n=== ALARM LIST: type, value, rule, first timestamp, no repeats ==
 
 console.log('\n=== DEVICE LMI: blank cell vs real reading ===');
 {
-  check('parseCSV turns the blank lmi_pct of 12:18:40 into 0 (so the panel has to cope)', rows[idx('12:18:40')].lmi_pct === 0);
+  const rawBlank = rows[idx('12:18:40')].lmi_pct;
+  check('a blank lmi_pct parses to 0 (current parseCSV) or NaN (fixed parseCSV); the panel copes with both', rawBlank === 0 || Number.isNaN(rawBlank), String(rawBlank));
   check('0 with 4 t on the hook is read as blank', deviceLmiPct({ lmi_pct: 0, load_t: 4 }) === null);
   check('0 with no load is a real 0 %', deviceLmiPct({ lmi_pct: 0, load_t: 0 }) === 0);
   check('NaN (blank, if the parser is fixed) is blank too', deviceLmiPct({ lmi_pct: NaN, load_t: 4 }) === null);
@@ -237,13 +238,17 @@ console.log('\n=== WHOLE DAY at 3 rows per frame ===');
   check('0 lift-off alarms (the 15:30 row is bad data)', count('OUTRIGGER LIFT OFF') === 0);
   check('4 BAD DATA entries', count('BAD DATA') === 4, String(count('BAD DATA')));
   check('2 dropout entries (15:25:00 and 16:00:02)', count('DROPOUT') === 2, String(count('DROPOUT')));
-  check('1 wind alert, 1 bypass, 4 pre-warnings, 1 LMI divergence, 1 not-permitted',
-    count('WIND ALERT') === 1 && count('LMI BYPASS') === 1 && count('LMI PREWARNING') === 4 && count('LMI DIVERGENCE') === 1 && count('NOT PERMITTED') === 1,
+  // With blanks as NaN the detector also sees the two single rows where the device is blank but the chart has a capacity
+  // (12:18:00 and 12:19:50, r = 10.00 m exactly). With the current parseCSV (blank = 0) those two rows are invisible.
+  const blanksAreNaN = Number.isNaN(rows[idx('12:18:40')].lmi_pct);
+  const divergenceExpected = blanksAreNaN ? 3 : 1;
+  check('1 wind alert, 1 bypass, 4 pre-warnings, LMI divergence (09:50 only; +2 boundary rows if blanks are NaN), 1 not-permitted',
+    count('WIND ALERT') === 1 && count('LMI BYPASS') === 1 && count('LMI PREWARNING') === 4 && count('LMI DIVERGENCE') === divergenceExpected && count('NOT PERMITTED') === 1,
     `${count('WIND ALERT')} ${count('LMI BYPASS')} ${count('LMI PREWARNING')} ${count('LMI DIVERGENCE')} ${count('NOT PERMITTED')}`);
   check('1 improper deployment (07:03:00) and 1 near-lift-off (10:25:20)', count('IMPROPER OUTRIGGER DEPLOYMENT') === 1 && count('OUTRIGGER NEAR LIFT OFF') === 1);
-  check('the blank LMI cells of 12:18 are not read as a 0 % reading (no LMI divergence there)',
-    !v.alarms.some((a) => a.type === 'LMI DIVERGENCE' && a.first.startsWith('12:')));
-  check('exactly 21 entries on the whole day', v.alarms.length === 21, String(v.alarms.length));
+  check('the blank LMI cells of 12:18 are not read as a 0 % reading (no multi-row LMI divergence there)',
+    !v.alarms.some((a) => a.type === 'LMI DIVERGENCE' && a.first.startsWith('12:') && a.rows > 1));
+  check(`exactly ${blanksAreNaN ? 23 : 21} entries on the whole day`, v.alarms.length === (blanksAreNaN ? 23 : 21), String(v.alarms.length));
   check('no entry appears twice with the same type and first timestamp',
     new Set(v.alarms.map((a) => a.type + '@' + a.first + (a.simulated ? 'S' : ''))).size === v.alarms.length);
   const bad = v.alarms.find((a) => a.type === 'BAD DATA' && a.first === '15:00:00');
@@ -278,7 +283,7 @@ console.log('\n=== DETECTOR INTEGRATION (what the panel hands to detectFailures)
   calls.length = 0;
   analyseSample(rows[idx('12:18:30')], rows[idx('12:18:30') - 1], spy);
   check('blank LMI where the chart has no capacity (no load) is NaN too', Number.isNaN(last().lmi), String(last().lmi));
-  check('...and the raw parse did give 0 there', rows[idx('12:18:30')].lmi_pct === 0);
+  check('...whatever the parser gave there (0 or NaN)', [0].includes(rows[idx('12:18:30')].lmi_pct) || Number.isNaN(rows[idx('12:18:30')].lmi_pct));
   calls.length = 0;
   analyseSample(rows[idx('08:00:00')], rows[idx('08:00:00') - 1], spy);
   check('a real 0 % reading (no load, chart valid) stays 0, one detector call', calls.length === 1 && calls[0].lmi === 0);
