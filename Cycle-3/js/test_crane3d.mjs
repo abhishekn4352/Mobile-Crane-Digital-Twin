@@ -21,6 +21,11 @@ import {
   buildOutriggerTimeline,
   outriggerExtensionAt,
   poseFromSample,
+  swayFromWind,
+  WIND_ALERT_KMH,
+  SWAY_LEAN_AT_ALERT_DEG,
+  SWAY_LEAN_MAX_DEG,
+  SWAY_PERIOD_S,
 } from './crane3d.js';
 
 let passed = 0;
@@ -94,6 +99,35 @@ check('copies slew in DATA convention (no mirroring here)', pose.slewDeg === s.s
 check('copies load', pose.loadT === s.load_t);
 check('DEPLOYED sample -> outriggerExt 1', pose.outriggerExt === 1);
 check('a NaN field stays NaN (setPose ignores it)', Number.isNaN(poseFromSample({ ...s, boom_angle_deg: NaN }, timeline).boomAngleDeg));
+check('copies wind from wind_kmh', pose.windKmh === s.wind_kmh && pose.windKmh === 11);
+
+
+console.log('\n=== WIND SWAY (visual only; wind speed is real, the angles are illustrative) ===');
+const windAt = (hms) => at(hms).wind_kmh;
+check('recording has exactly two wind values: 11 km/h and 45 km/h',
+  [...new Set(rows.map((r) => r.wind_kmh))].sort((a, b) => a - b).join() === '11,45');
+check('wind alert at 12:30:00 is 45 km/h (> 36)', windAt('12:30:00') === 45 && windAt('12:30:00') > WIND_ALERT_KMH);
+check('no wind -> no sway', (() => { const r = swayFromWind(0, 1.3); return near(r.leanDeg, 0) && near(r.alongDeg, 0) && near(r.crossDeg, 0); })());
+check('at the 36 km/h alert speed the lean is the scale value (5 deg)', near(swayFromWind(WIND_ALERT_KMH, 0).leanDeg, SWAY_LEAN_AT_ALERT_DEG));
+check('lean grows with wind speed squared (72 km/h = 4x the lean of 36 km/h, before the cap)',
+  near(swayFromWind(72, 0).leanDeg, Math.min(SWAY_LEAN_MAX_DEG, 4 * SWAY_LEAN_AT_ALERT_DEG)));
+check('lean is capped for extreme wind', near(swayFromWind(300, 0).leanDeg, SWAY_LEAN_MAX_DEG));
+check('45 km/h lean is more than 10x the lean at 11 km/h', swayFromWind(45, 0).leanDeg > 10 * swayFromWind(11, 0).leanDeg);
+check('11 km/h lean is small (< 1 deg)', swayFromWind(11, 0).leanDeg < 1);
+check('45 km/h lean is clearly visible (> 7 deg)', swayFromWind(45, 0).leanDeg > 7);
+check('negative wind is treated as 0', near(swayFromWind(-5, 0).leanDeg, 0));
+check('swing repeats after one period', near(swayFromWind(45, 0.7).alongDeg, swayFromWind(45, 0.7 + SWAY_PERIOD_S).alongDeg, 1e-9));
+check('along-wind angle swings around the lean (min < lean < max over a period)', (() => {
+  const v = []; for (let t = 0; t < SWAY_PERIOD_S; t += 0.05) v.push(swayFromWind(45, t).alongDeg);
+  const lean = swayFromWind(45, 0).leanDeg;
+  return Math.min(...v) < lean && Math.max(...v) > lean;
+})());
+check('swing never goes below 0 deg lean-wise at 45 km/h (load leans downwind, does not flip upwind)', (() => {
+  for (let t = 0; t < SWAY_PERIOD_S; t += 0.05) if (swayFromWind(45, t).alongDeg < 0) return false; return true;
+})());
+check('NaN wind -> null (model keeps its last sway)', swayFromWind(NaN, 1) === null);
+check('NaN time -> null', swayFromWind(11, NaN) === null);
+check('deterministic: same inputs, same output', JSON.stringify(swayFromWind(45, 2.2)) === JSON.stringify(swayFromWind(45, 2.2)));
 
 
 console.log('\n==============================================');

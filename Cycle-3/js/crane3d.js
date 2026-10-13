@@ -30,6 +30,12 @@
 //   7. Slew sign is mirrored inside setPose(): the original model
 //      rotates the other way from stability.js loadGroundPosition().
 //   8. Load block (beams + slings) can be hidden when load_t = 0.
+//   9. Wind sway: the hook block and load swing from the rope anchor
+//      as a pendulum. The WIND SPEED is real (wind_kmh from the CSV).
+//      The AMPLITUDE, PERIOD and DIRECTION are illustrative only: the
+//      kit gives no load area, rope length or wind direction, so
+//      nothing here is a physical sway calculation. Listed as
+//      "faked" in the README Real-vs-faked table.
 //
 // Frame (same as stability.js): slew axis at (0, 0, 0). Slew 0 =
 // boom towards +x. loadGroundPosition(r, slew) = (r*cos, r*sin).
@@ -123,6 +129,46 @@ export function poseFromSample(sample, timeline) {
     slewDeg: sample.slew_deg,
     outriggerExt: outriggerExtensionAt(timeline, sample),
     loadT: sample.load_t,
+    windKmh: sample.wind_kmh,
+  };
+}
+
+
+// ------------------------------------------------------------
+// Wind sway (VISUAL ONLY)
+//
+// Input that is real:   wind_kmh from the telemetry sample.
+// Everything below is an illustration, not physics:
+//   - the lean grows with wind speed squared (drag ~ v^2), scaled so
+//     that the kit's 36 km/h wind-alert speed gives SWAY_LEAN_AT_ALERT_DEG;
+//   - the period and the cross-wind part are chosen to look natural;
+//   - the wind direction is not in the data, so the view assumes one.
+// ------------------------------------------------------------
+
+export const WIND_ALERT_KMH = 36;            // kit alert threshold (README column dictionary)
+export const SWAY_LEAN_AT_ALERT_DEG = 5;     // visual scale, not a manufacturer figure
+export const SWAY_LEAN_MAX_DEG = 12;         // keeps the picture sensible at extreme wind
+export const SWAY_OSC_FRACTION = 0.6;        // swing around the lean = 60 % of the lean
+export const SWAY_PERIOD_S = 5;              // seconds of real (screen) time, not telemetry time
+export const SWAY_CROSS_FRACTION = 0.35;     // cross-wind swing relative to the along-wind swing
+
+/**
+ * Sway angles of the hanging load for one wind speed and one screen time.
+ * Returns degrees along the wind direction (steady lean + swing) and across it,
+ * or null when the wind speed is not a number (the model then keeps its last sway).
+ * tSec only drives the swing animation; it is NOT the telemetry clock.
+ */
+export function swayFromWind(windKmh, tSec) {
+  if (!Number.isFinite(windKmh) || !Number.isFinite(tSec)) return null;
+  const w = Math.max(0, windKmh);
+  const leanDeg = Math.min(SWAY_LEAN_MAX_DEG, SWAY_LEAN_AT_ALERT_DEG * (w / WIND_ALERT_KMH) ** 2);
+  const oscDeg = SWAY_OSC_FRACTION * leanDeg;
+  const w0 = 2 * Math.PI / SWAY_PERIOD_S;
+  return {
+    leanDeg,
+    oscDeg,
+    alongDeg: leanDeg + oscDeg * Math.sin(w0 * tSec),
+    crossDeg: SWAY_CROSS_FRACTION * oscDeg * Math.sin(w0 * tSec / 1.27 + 1.1),
   };
 }
 
@@ -135,14 +181,18 @@ export function poseFromSample(sample, timeline) {
  * Builds the crane and adds it to `scene`.
  * @param THREE  the three.js namespace (r128)
  * @param scene  THREE.Scene (or any Object3D)
- * @param opts   { padHalfX, padHalfZ, hookFraction }
- * @returns { root, setPose, headWorld, padWorld, isLoadVisible, dispose }
+ * @param opts   { padHalfX, padHalfZ, hookFraction, windTowardDeg }
+ *               windTowardDeg: direction the wind blows TOWARD, in data convention
+ *               (0 = +x, 90 = +z). Not in the telemetry, so it is an assumption; default 90.
+ * @returns { root, setPose, tick, swayDeg, headWorld, padWorld, isLoadVisible, dispose }
  */
 export function createCrane3D(THREE, scene, opts = {}) {
   const T = THREE;
   const padHalfX = opts.padHalfX ?? DEFAULT_PAD_HALF_X_M;
   const padHalfZ = opts.padHalfZ ?? DEFAULT_PAD_HALF_Z_M;
   const hookFraction = clamp(opts.hookFraction ?? 0.9, 0, 1);   // 1 = hook right under the head
+  const windRad = (opts.windTowardDeg ?? 90) * Math.PI / 180;
+  const windDir = { x: Math.cos(windRad), z: Math.sin(windRad) };
   const k = BOOM_SCALE;
   const px = BOOM_PIVOT_X_M;
 
@@ -282,8 +332,46 @@ export function createCrane3D(THREE, scene, opts = {}) {
   const ropes = [0, 1].map(() => { const m = new T.Mesh(new T.CylinderGeometry(.035, .035, 1, 8), K); m.castShadow = true; root.add(m); return m; });
 
   // ---- state + update
-  const V = { boom: 70, ext: 0.5, slew: 0, out: 1, hook: hookFraction };
+  const V = { boom: 70, ext: 0.5, slew: 0, out: 1, hook: hookFraction,
+              wind: 0, windSmooth: 0, tLast: null, swayAlongDeg: 0, swayCrossDeg: 0 };
   const Pw = new T.Vector3(), Q = new T.Quaternion(), dir = new T.Vector3();
+  const Y_AXIS = new T.Vector3(0, 1, 0);
+  const qYaw = new T.Quaternion(), qTilt = new T.Quaternion();
+  const vUp = new T.Vector3(), vTop = new T.Vector3(), vBot = new T.Vector3();
+  let hookY = 4.4;      // hook height with no sway
+  let hookDrop = 0;     // rope length from the boom head to the hook block with no sway
+
+  // Hangs the hook block + load from the rope anchor as a pendulum.
+  // With no sway (wind 0, or a very short rope) it is exactly the old fixed placement.
+  function placeHook() {
+    const Le = hookDrop;
+    let ox = 0, oz = 0, drop = Le;
+    if (Le > 0.3) {
+      const a = V.swayAlongDeg * Math.PI / 180, c = V.swayCrossDeg * Math.PI / 180;
+      ox = Le * (Math.sin(a) * windDir.x - Math.sin(c) * windDir.z);
+      oz = Le * (Math.sin(a) * windDir.z + Math.sin(c) * windDir.x);
+      drop = Math.sqrt(Math.max(Le * Le - ox * ox - oz * oz, 0));
+    }
+    const y = Le > 0.3 ? Pw.y - drop : hookY;
+    hk.position.set(Pw.x + ox, y, Pw.z + oz);
+    qYaw.setFromAxisAngle(Y_AXIS, Math.atan2(-dir.z, dir.x));
+    if (Le > 0.3 && (ox !== 0 || oz !== 0)) {
+      vUp.set(-ox, drop, -oz).normalize();                  // from the hook back to the anchor
+      qTilt.setFromUnitVectors(Y_AXIS, vUp);
+      hk.quaternion.copy(qTilt).multiply(qYaw);
+    } else {
+      hk.quaternion.copy(qYaw);
+    }
+    ropes.forEach((m, i) => {
+      const sg = i ? 1 : -1;
+      vTop.set(Pw.x + dir.x * .25 * sg, Pw.y, Pw.z + dir.z * .25 * sg);
+      vBot.set(.25 * sg, .2, 0).applyQuaternion(hk.quaternion).add(hk.position);
+      const len = Math.max(.01, vTop.distanceTo(vBot));
+      m.position.copy(vTop).add(vBot).multiplyScalar(.5);
+      m.quaternion.setFromUnitVectors(Y_AXIS, vUp.copy(vTop).sub(vBot).normalize());
+      m.scale.y = len;
+    });
+  }
 
   function update() {
     const ang = V.boom * Math.PI / 180, c = Math.cos(ang), s = Math.sin(ang);
@@ -311,14 +399,10 @@ export function createCrane3D(THREE, scene, opts = {}) {
     root.updateMatrixWorld(true);
     ap.getWorldPosition(Pw); ap.getWorldQuaternion(Q);
     dir.set(1, 0, 0).applyQuaternion(Q); dir.y = 0; dir.normalize();
-    const len = 1.5 + (1 - V.hook) * 9, hy = Math.max(Pw.y - len, 4.4);
-    hk.position.set(Pw.x, hy, Pw.z);
-    hk.rotation.y = Math.atan2(-dir.z, dir.x);
-    ropes.forEach((m, i) => {
-      const sg = i ? 1 : -1, top = Pw.y, bot = hy + .2;
-      m.position.set(Pw.x + dir.x * .25 * sg, (top + bot) / 2, Pw.z + dir.z * .25 * sg);
-      m.scale.y = Math.max(.01, top - bot);
-    });
+    const len = 1.5 + (1 - V.hook) * 9;
+    hookY = Math.max(Pw.y - len, 4.4);
+    hookDrop = Math.max(Pw.y - hookY, 0);
+    placeHook();
   }
 
   /**
@@ -330,8 +414,10 @@ export function createCrane3D(THREE, scene, opts = {}) {
    *   slewDeg        slew angle; 0 = +x, 90 = +z (mirrored internally)
    *   outriggerExt   0 retracted .. 1 fully out
    *   loadT          tonnes; the load block is shown only when > 0.05
+   *   windKmh        wind speed; drives the sway of the hanging load (see tick)
    */
   function setPose(p = {}) {
+    if (Number.isFinite(p.windKmh)) V.wind = Math.max(0, p.windKmh);
     if (Number.isFinite(p.boomAngleDeg)) V.boom = clamp(p.boomAngleDeg, BOOM_ANGLE_MIN_DEG, BOOM_ANGLE_MAX_DEG);
     const ext = boomExtensionFromLength(p.boomLengthM);
     if (ext !== null) V.ext = ext;
@@ -342,8 +428,32 @@ export function createCrane3D(THREE, scene, opts = {}) {
     update();
   }
 
+  /**
+   * Call once per screen frame with a screen-time clock in seconds (for example
+   * performance.now() / 1000). It animates the wind sway only; it does not touch the
+   * telemetry clock and is not used as time anywhere in the logic.
+   * The wind speed is eased (about 0.7 s) so a step in the data does not make the load jump.
+   */
+  function tick(tSec) {
+    if (!Number.isFinite(tSec)) return;
+    const dt = V.tLast === null ? 0 : clamp(tSec - V.tLast, 0, 0.1);
+    V.tLast = tSec;
+    V.windSmooth += (V.wind - V.windSmooth) * (1 - Math.exp(-dt / 0.7));
+    const s = swayFromWind(V.windSmooth, tSec);
+    if (!s) return;
+    V.swayAlongDeg = s.alongDeg;
+    V.swayCrossDeg = s.crossDeg;
+    placeHook();
+  }
+
+  /** Current sway of the load in degrees (along the wind, across it). */
+  function swayDeg() { return { along: V.swayAlongDeg, cross: V.swayCrossDeg }; }
+
   /** World position of the boom head (where the rope leaves). The hook hangs below it. */
   function headWorld() { return { x: Pw.x, y: Pw.y, z: Pw.z }; }
+
+  /** World position of the hook block (moves with the sway). */
+  function hookWorld() { return { x: hk.position.x, y: hk.position.y, z: hk.position.z }; }
 
   /** World positions of the four pads, in the order +x/+z, +x/-z, -x/+z, -x/-z. */
   function padWorld() {
@@ -360,7 +470,7 @@ export function createCrane3D(THREE, scene, opts = {}) {
 
   setPose({});   // place everything once
 
-  return { root, setPose, headWorld, padWorld, isLoadVisible: () => loadRig.visible, dispose };
+  return { root, setPose, tick, swayDeg, headWorld, hookWorld, padWorld, isLoadVisible: () => loadRig.visible, dispose };
 }
 
 

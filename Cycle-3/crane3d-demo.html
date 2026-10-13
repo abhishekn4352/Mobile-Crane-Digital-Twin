@@ -7,6 +7,9 @@
   Drives the 3D crane (js/crane3d.js) from the real telemetry CSV through
   Ajit's PlaybackClock (js/playbackClock.js). Nothing here computes capacity,
   stability or alarms: it only shows the recording.
+  The hanging load sways with wind_kmh from the CSV (calm at 11 km/h, clearly
+  swinging in the 45 km/h wind alert at 12:30:00). Wind speed is real; the sway
+  amplitude, period and direction are illustrative only.
 
   Needs (relative to this file): js/playbackClock.js, js/crane3d.js, data/mobile-telemetry-2026-09-16.csv
   and ../Cycle-2/js/stability.js. In the repository they are all there already.
@@ -50,6 +53,8 @@ label.c{display:inline-flex;gap:6px;align-items:center;color:var(--mu);font-size
   <div class="row"><span>Boom angle</span><span id="i_ang">-</span></div>
   <div class="row"><span>Radius (data)</span><span id="i_rad">-</span></div>
   <div class="row"><span>Slew</span><span id="i_slew">-</span></div>
+  <div class="row" title="Real value from the CSV. The kit alert threshold is 36 km/h."><span>Wind</span><span id="i_wind">-</span></div>
+  <div class="row" title="VISUAL ONLY. The wind speed is real; the sway size, period and direction are illustrative (the kit has no load area, rope length or wind direction)."><span>Load sway (visual)</span><span id="i_sway">-</span></div>
   <div class="row"><span>Outriggers</span><span id="i_out">-</span></div>
   <div class="row" title="Distance between the hook in the 3D model and the load point drawn from radius_m + slew_deg. About 0 on normal rows; large on impossible rows."><span>Hook ↔ green marker</span><span id="i_gap">-</span></div>
 </div>
@@ -155,6 +160,9 @@ function loop(n) {
   const dt = Math.min(.05, (n - last) / 1e3); last = n;
   if (auto && !P.size) th += dt * .1;
   r += (rT - r) * .06;
+  crane.tick(n / 1000);                                  // wind sway animation (screen time, not telemetry time)
+  const sw = crane.swayDeg();
+  $('i_sway').textContent = 'along ' + sw.along.toFixed(1) + '° · across ' + sw.cross.toFixed(1) + '°';
   C.position.set(tg.x + r * Math.sin(ph) * Math.cos(th), tg.y + r * Math.cos(ph), tg.z + r * Math.sin(ph) * Math.sin(th));
   C.lookAt(tg);
   R.render(S, C);
@@ -182,6 +190,8 @@ function apply(sample) {
   $('i_ang').textContent = fmt(sample.boom_angle_deg, 1, '°');
   $('i_rad').textContent = fmt(sample.radius_m, 1, ' m');
   $('i_slew').textContent = fmt(sample.slew_deg, 0, '°');
+  $('i_wind').textContent = fmt(sample.wind_kmh, 0, ' km/h') + (sample.wind_kmh > 36 ? '  ALERT' : '');
+  $('i_wind').className = sample.wind_kmh > 36 ? 'bad' : '';
   $('i_out').textContent = sample.outrigger_state + (Number.isFinite(pose.outriggerExt) ? ' ' + Math.round(pose.outriggerExt * 100) + '%' : '');
   $('i_gap').textContent = fmt(gap, 1, ' m');
   $('i_gap').className = gap > 1 ? 'bad' : '';
@@ -234,7 +244,8 @@ async function start() {
   mark('17:00:00', 'impossible row: angle 95°');
   jump.onchange = () => { if (jump.value) clock.jumpTo(jump.value); jump.selectedIndex = 0; };
 
-  window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, apply };
+  window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, apply,
+    cam: { target: tg, set(dist, theta, phi) { rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
   apply(clock.currentTelemetrySample);
 }
 start();
