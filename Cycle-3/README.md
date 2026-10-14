@@ -10,45 +10,138 @@ The Playback & Clock module is responsible for loading, parsing, and streaming t
 
 Key responsibilities include:
 
-- Reading and parsing the recorded telemetry CSV file.
-- Managing playback clock based on the telemetry timestamps (`ts`).
+- Reading and parsing the recorded telemetry CSV file (`mobile-telemetry-2026-09-16.csv`, 39,301 rows).
+- Managing a **ts-driven** playback clock that advances by the actual timestamp difference between consecutive rows — not by a fixed 1-second assumption — so that real dropout intervals are preserved faithfully.
 - Providing play/pause controls and speed multiplier adjustments (`1x`, `10x`, `50x`, `100x`).
-- Maintaining the active Telemetry State for downstream modules.
+- Maintaining the active `currentTelemetrySample` state for downstream modules (Failure Detector, Stability/Load Chart, UI panels).
 - Handling the `LIVE` vs `MANUAL` operating mode toggle:
-  - **LIVE Mode:** Crane state is driven strictly by telemetry timestamp progression.
-  - **MANUAL Mode:** Telemetry stream pauses and user UI sliders gain control.
+  - **LIVE Mode:** Crane state is driven strictly by CSV timestamp progression.
+  - **MANUAL Mode:** Telemetry stream pauses and user UI sliders gain control; the clock publishes a user-constructed sample on each slider change.
 
 ### 2. Telemetry Parsing & Clock Mechanics
 
-- Parse incoming CSV row-by-row containing: `timestamp`, `load`, `boom_length`, `boom_angle`, `slew_angle`, `outrigger_state`, `hydraulic_pressure`.
-- Step through telemetry data frame-by-frame aligned with standard timer intervals.
-- Expose the active `currentTelemetrySample` state object to Failure Detector, Stability/Loadchart, and UI panels.
+**`parseCSV(csvText)`** returns a sorted array of telemetry objects. Each row contains the following fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `ts` | string | ISO 8601 timestamp with timezone (`+05:30`) |
+| `load_t` | number / NaN | Hook load in tonnes; NaN when cell is blank |
+| `boom_length_m` | number / NaN | Boom length in metres |
+| `boom_angle_deg` | number / NaN | Luff angle in degrees |
+| `radius_m` | number / NaN | Working radius in metres |
+| `slew_deg` | number / NaN | Slew angle in degrees |
+| `hook_height_m` | number / NaN | Hook height in metres |
+| `pad_fl_t … pad_rr_t` | number / NaN | Four outrigger pad reactions in tonnes |
+| `hydraulic_pressure_bar` | number / NaN | Hydraulic pressure in bar |
+| `wind_kmh` | number / NaN | Wind speed in km/h |
+| `lmi_pct` | number / NaN | Device LMI percentage; **NaN when blank** (see §5) |
+| `status_word` | number / NaN | Device status bitmask |
+| `outrigger_state` | string | `DEPLOYED`, `DEPLOYING`, `RETRACTED`, etc. |
+| `event` | string | Device event string |
+
+The returned array also carries a non-enumerable `.fileOrder` property — the rows in the original file order before sorting — so clock-fault detection can find backwards or repeated timestamps that sorting would otherwise hide (see §5, Gap Fix 2).
+
+**Clock stepping** uses the actual `ts` difference between the current row and the next:
+
+```
+tsGapMs = Date.parse(rows[i+1].ts) - Date.parse(rows[i].ts)
+```
+
+Each `_tick()` drains accumulated simulated milliseconds against the real gap, so a 300-second dropout (15:20:00–15:24:59) causes the clock to skip 300 s in one step rather than playing silently through it. Falls back to 1000 ms if consecutive timestamps are malformed.
 
 ### 3. Playback Controls & Modes
 
-- **Controls:** Play, Pause, Reset, Jump to Timestamp.
-- **Playback Rates:** `1x` (Real-time), `10x`, `50x`, `100x` fast-forward.
+- **Controls:** `play()`, `pause()`, `togglePlay()`, `reset()`, `jumpTo(targetTs)`.
+- **Playback Rates:** `1x` (real-time), `10x`, `50x`, `100x` fast-forward. Set with `setRate(rate)`.
 - **Mode Toggle:**
-  - `LIVE`: Read-only telemetry stream driving the simulator.
-  - `MANUAL`: Interactive override using UI sliders.
+  - `setManual()` — pauses the clock; UI sliders take control. Call `pushManualSample(sample)` to emit a user-built sample.
+  - `setLive()` — resumes LIVE playback from the current position.
 
 ### 4. Testing
 
-A dedicated test file will be maintained:
+Test file: `js/test_playbackClock.mjs`
 
-`js/test_playbackClock.mjs`
+Run with:
 
-Tests will cover:
-- CSV parsing accuracy and error handling.
-- Timestamp ordering and frame-stepping logic.
-- Playback speed calculations and clock drift prevention.
-- Seamless state switching between `LIVE` and `MANUAL` modes.
+```
+node Cycle-3/js/test_playbackClock.mjs
+```
 
-### 5. Module Integration
+**Results: 74 / 74 tests pass** (0 failures).
 
-The Playback & Clock module serves as the central data provider (Telemetry Pipeline) for the entire Digital Twin architecture:
+| Area | Tests |
+|---|---|
+| CSV parsing — headers, numeric casting, string fields | 7 |
+| Timestamp sort (out-of-order input) + `fileOrder` preservation | 7 |
+| Blank lines skipped | 1 |
+| Non-finite numeric → NaN | 1 |
+| Gap Fix 1 — blank cell → NaN (not 0) | 3 |
+| Error handling (null, empty string, header-only) | 3 |
+| Construction and public state | 7 |
+| Construction error handling | 3 |
+| `setRate` — valid and invalid rates | 6 |
+| `jumpTo` and `reset` | 6 |
+| LIVE / MANUAL mode toggle | 4 |
+| `pushManualSample` (MANUAL and LIVE) | 4 |
+| End-of-recording auto-stop | 3 |
+| Gap Fix 3 — ts-driven stepping across a 300 s dropout | 4 |
+| `destroy` | 3 |
+| Real CSV smoke test (39,301 rows) | 10 |
 
-`CSV File -> Playback Engine -> Telemetry State -> Shared Calculations / Failure Detector / 3D & UI`
+### 5. Gap Fixes Applied (Oct 2026)
+
+These fixes were identified in the project gap analysis and applied to `js/playbackClock.js`.
+
+| Priority | Gap | Fix applied |
+|---|---|---|
+| **High** | `parseCSV` read blank numeric cells as `0` (`Number('') === 0`), causing 109 false `LMI_DIVERGENCE` alarms in the 12:18–12:19 window where `lmi_pct` is intentionally blank. | Blank cell → `NaN`: `const n = raw === '' ? NaN : Number(raw)`. All existing tests still pass; the 109 false alarms disappear. |
+| **High** | `parseCSV` sorted all rows by `ts`, hiding the backwards timestamp step 15:59:59 → 15:59:49 from any code that received the array. | File order is preserved in a non-enumerable `.fileOrder` property on the returned array. The sorted copy is used by the clock; `.fileOrder` is used by clock-fault detection. |
+| **High** | Clock assumed every row = 1 simulated second, making the 300-row dropout at 15:20:00–15:24:59 invisible during playback. | Clock is now **ts-driven**: each tick drains accumulated simulated ms against `Date.parse(next.ts) - Date.parse(curr.ts)`. A 300-second gap is traversed in a single step. |
+
+### 6. Module Integration
+
+The Playback & Clock module is the central data provider for the entire Cycle 3 Digital Twin pipeline:
+
+```
+CSV File (39,301 rows)
+      ↓
+parseCSV()  →  sorted rows  +  rows.fileOrder (original file order)
+      ↓
+PlaybackClock._tick()  →  currentTelemetrySample (one row per frame)
+      ↓
+Module 3 (craneModel.js)    →  ratedCapacity, stabilityVerdict
+Module 2 (failureDetector)  →  alarm list
+Module 4 (panelModel.js)    →  sensor panel + 3D view
+```
+
+Exported API:
+
+| Export | Used by |
+|---|---|
+| `parseCSV(csvText)` | Module 4 simulator entry point |
+| `PlaybackClock` (class) | Module 4 simulator entry point |
+| `createPlaybackClock(url, onUpdate)` | Module 4 simulator entry point (browser) |
+| `clock.currentTelemetrySample` | Modules 2, 3, 4 |
+| `clock.setManual()` / `clock.setLive()` | Module 4 UI controls |
+| `clock.pushManualSample(sample)` | Module 4 slider override |
+| `clock.onUpdate(sample, clock)` callback | Module 4 re-render trigger |
+| `rows.fileOrder` | Module 4 `dataQuality.js` clock-fault scan |
+
+### 7. Real vs Faked
+
+| Feature | Source | Status |
+|---|---|---|
+| Telemetry timestamps (`ts`) | CSV column — ISO 8601 strings | **Real** |
+| Load, boom length / angle, radius, slew | CSV numeric columns | **Real** |
+| Outrigger state | CSV string column | **Real** |
+| Pad reactions (FL, FR, RL, RR) | CSV numeric columns | **Real** |
+| Hydraulic pressure, wind speed | CSV numeric columns | **Real** |
+| `lmi_pct` | CSV numeric column; blank when chart has no capacity | **Real** — blank correctly stored as `NaN` |
+| `status_word` | CSV numeric column | **Real** — device bitmask |
+| Clock advance interval | Actual `ts` difference between consecutive rows | **Real** — ts-driven, not assumed 1 s |
+| File-order glitch detection | `.fileOrder` property on the parsed array | **Real** — preserves the true file sequence |
+| Playback speed multipliers (1×–100×) | Wall-clock scaling of simulated time | **Scaled** — real data, compressed time |
+| MANUAL mode sample | Constructed from UI slider values by Module 4 | **Simulated** — not from the recording |
 
 ---
 

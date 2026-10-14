@@ -79,7 +79,11 @@ h3:first-child{margin-top:0}
 #stage{display:grid;grid-template-rows:minmax(0,1fr) auto;min-width:0;min-height:0}
 #view{position:relative;min-height:0;background:#aec8de}
 #view canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
-#view .note{position:absolute;left:8px;top:8px;background:rgba(28,30,34,.88);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font-size:11px;color:var(--muted)}
+#view .note{position:absolute;left:8px;top:8px;background:rgba(28,30,34,.88);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font-size:11px;color:var(--muted);z-index:2}
+#viewBtns{position:absolute;right:8px;top:8px;display:flex;gap:4px;z-index:3}
+#viewBtns button{background:rgba(28,30,34,.88);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s ease}
+#viewBtns button:hover{background:var(--surface-2);border-color:var(--crane-yellow)}
+#viewBtns button.on{background:var(--crane-yellow);color:#17140a;border-color:var(--crane-yellow)}
 #dock{border-top:1px solid var(--line);background:var(--surface-2);padding:8px 12px 10px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
 #scrub{flex:1;min-width:140px;accent-color:var(--crane-yellow)}
@@ -196,7 +200,16 @@ details ul{margin:6px 0 0;padding-left:16px;color:var(--muted)}
 
     <!-- ================= centre: 3D + controls ================= -->
     <section id="stage">
-      <div id="view"><div class="note" title="The wind speed is real (CSV). The size, period and direction of the sway are illustrative only.">3D view · drag to orbit · scroll to zoom · load sway = wind (visual only)</div></div>
+      <div id="view">
+        <div class="note" title="The wind speed is real (CSV). The size, period and direction of the sway are illustrative only.">3D view · drag to orbit · scroll to zoom</div>
+        <div id="viewBtns">
+          <button id="v_top" title="Top (Bird's Eye) View">🔝 Top</button>
+          <button id="v_side" title="Side Profile View">📐 Side</button>
+          <button id="v_front" title="Front View">📷 Front</button>
+          <button id="v_reset" title="Reset View">⟲ Reset</button>
+          <button id="v_rot" title="Toggle Auto-Rotation">↻ Rotate</button>
+        </div>
+      </div>
       <div id="dock">
         <div class="row">
           <div class="seg" role="group" aria-label="Mode">
@@ -315,27 +328,114 @@ pad.rotation.x = -Math.PI / 2; pad.position.y = .02; pad.receiveShadow = true; S
 const crane = createCrane3D(T, S, { padHalfX: POLYGON[1].x, padHalfZ: POLYGON[2].z });
 const overlay = createGroundOverlay(T, S, POLYGON);
 
-// orbit camera
-const tg = new T.Vector3(0, 22, 0);
-let th = .75, ph = 1.2, r = 135, rT = 135, auto = false;
+// orbit camera + cursor-targeted zoom
+const tg = new T.Vector3(0, 6, 0);
+const tgTarget = new T.Vector3(0, 6, 0);
+let th = .75, ph = 1.25, r = 135, rT = 135, auto = false;
 const P = new Map();
-R.domElement.onpointerdown = (e) => { R.domElement.setPointerCapture(e.pointerId); P.set(e.pointerId, e); };
+const raycaster = new T.Raycaster();
+const mouse = new T.Vector2();
+const hitPoint = new T.Vector3();
+const hitPlane = new T.Plane();
+const camDir = new T.Vector3();
+
+R.domElement.oncontextmenu = (e) => e.preventDefault();
+
+R.domElement.onpointerdown = (e) => { 
+  R.domElement.setPointerCapture(e.pointerId); 
+  P.set(e.pointerId, e); 
+  clearActiveView();
+};
 R.domElement.onpointerup = R.domElement.onpointercancel = (e) => P.delete(e.pointerId);
 R.domElement.onpointermove = (e) => {
   const o = P.get(e.pointerId); if (!o) return;
-  if (P.size === 1) { th -= (e.clientX - o.clientX) * .006; ph = Math.min(1.5, Math.max(.12, ph - (e.clientY - o.clientY) * .006)); }
+  // Right button drag: Pan
+  if (e.buttons === 2) {
+    camDir.subVectors(tg, C.position).normalize();
+    const right = new T.Vector3().crossVectors(camDir, C.up).normalize();
+    const up = new T.Vector3().crossVectors(right, camDir).normalize();
+    const panSpeed = (r / 600);
+    const dx = (e.clientX - o.clientX) * panSpeed;
+    const dy = (e.clientY - o.clientY) * panSpeed;
+    tgTarget.addScaledVector(right, -dx);
+    tgTarget.addScaledVector(up, dy);
+    tg.copy(tgTarget);
+  } else if (P.size === 1) { 
+    th -= (e.clientX - o.clientX) * .006; 
+    ph = Math.min(1.5, Math.max(.12, ph - (e.clientY - o.clientY) * .006)); 
+  }
   P.set(e.pointerId, e);
 };
-R.domElement.addEventListener('wheel', (e) => { e.preventDefault(); rT = Math.min(230, Math.max(12, rT * Math.exp(e.deltaY * .001))); }, { passive: false });
+
+// Zoom to Mouse Cursor: Raycasts into the 3D scene so zooming in focuses exactly on the hovered feature
+R.domElement.addEventListener('wheel', (e) => { 
+  e.preventDefault(); 
+  clearActiveView();
+
+  const rect = R.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, C);
+
+  // Raycast into scene (crane components, ground, pads)
+  const hits = raycaster.intersectObjects(S.children, true);
+  let found = false;
+  if (hits.length > 0) {
+    for (const h of hits) {
+      if (h.point && Number.isFinite(h.point.x)) {
+        hitPoint.copy(h.point);
+        found = true;
+        break;
+      }
+    }
+  }
+
+  if (!found) {
+    camDir.subVectors(tg, C.position).normalize();
+    hitPlane.setFromNormalAndCoplanarPoint(camDir, tg);
+    if (!raycaster.ray.intersectPlane(hitPlane, hitPoint)) {
+      hitPoint.copy(tg);
+    }
+  }
+
+  // Safety clamp hit point within reasonable workspace bounds
+  hitPoint.x = Math.min(80, Math.max(-80, hitPoint.x));
+  hitPoint.y = Math.min(65, Math.max(0, hitPoint.y));
+  hitPoint.z = Math.min(80, Math.max(-80, hitPoint.z));
+
+  const zoomFactor = Math.exp(e.deltaY * 0.001);
+  const oldR = rT;
+  rT = Math.min(230, Math.max(12, rT * zoomFactor));
+
+  if (e.deltaY < 0) {
+    // Zooming IN towards mouse cursor point
+    const shiftRatio = Math.min(0.45, (oldR - rT) / oldR);
+    tgTarget.lerp(hitPoint, shiftRatio);
+  } else if (e.deltaY > 0) {
+    // Zooming OUT: smoothly recenter towards crane base/center
+    const defaultCenter = new T.Vector3(0, 6, 0);
+    const shiftRatio = Math.min(0.25, (rT - oldR) / rT);
+    tgTarget.lerp(defaultCenter, shiftRatio);
+  }
+}, { passive: false });
+
 function size() {
   const w = Math.max(view.clientWidth, 1), h = Math.max(view.clientHeight, 1);
   R.setSize(w, h, false); C.aspect = w / h; C.updateProjectionMatrix();
 }
 new ResizeObserver(size).observe(view); size();
 
+let lastTime = performance.now();
 function loop(n) {
   requestAnimationFrame(loop);
-  r += (rT - r) * .06;
+  const dt = Math.min(.05, (n - lastTime) / 1000); lastTime = n;
+  if (auto && !P.size) th += dt * 0.15;
+  r += (rT - r) * .08;
+
+  // Smooth target transition towards cursor zoom target
+  tg.lerp(tgTarget, 0.1);
+
   C.position.set(tg.x + r * Math.sin(ph) * Math.cos(th), tg.y + r * Math.cos(ph), tg.z + r * Math.sin(ph) * Math.sin(th));
   C.lookAt(tg);
   crane.tick(n / 1000);                 // wind sway animation: screen time only, never used as telemetry time
@@ -343,6 +443,23 @@ function loop(n) {
   if (clock) { syncControls(); watchDropout(n); }
 }
 requestAnimationFrame(loop);
+
+// view-preset buttons
+const vBtns = { top: $('v_top'), side: $('v_side'), front: $('v_front'), reset: $('v_reset'), rot: $('v_rot') };
+function clearActiveView() {
+  ['top', 'side', 'front', 'reset'].forEach(k => vBtns[k]?.classList.remove('on'));
+}
+if (vBtns.top) {
+  vBtns.top.onclick = () => { clearActiveView(); vBtns.top.classList.add('on'); tgTarget.set(0, 4, 0); th = 0; ph = 0.08; rT = 100; auto = false; vBtns.rot?.classList.remove('on'); };
+  vBtns.side.onclick = () => { clearActiveView(); vBtns.side.classList.add('on'); tgTarget.set(0, 6, 0); th = 0; ph = 1.45; rT = 110; auto = false; vBtns.rot?.classList.remove('on'); };
+  vBtns.front.onclick = () => { clearActiveView(); vBtns.front.classList.add('on'); tgTarget.set(0, 6, 0); th = Math.PI / 2; ph = 1.45; rT = 110; auto = false; vBtns.rot?.classList.remove('on'); };
+  vBtns.reset.onclick = () => { clearActiveView(); vBtns.reset.classList.add('on'); tgTarget.set(0, 6, 0); th = 0.75; ph = 1.25; rT = 135; auto = false; vBtns.rot?.classList.remove('on'); };
+  vBtns.rot.onclick = () => {
+    auto = !auto;
+    vBtns.rot.classList.toggle('on', auto);
+    if (auto) clearActiveView();
+  };
+}
 
 
 // ---------------------------------------------------------------- telemetry + panel
@@ -497,7 +614,7 @@ async function start() {
   jump.onchange = () => { if (jump.value) jumpToTs(jump.value); jump.selectedIndex = 0; };
 
   window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, session, panel, manualInput, enterManual, returnToLive, jumpToTs, faults,
-    cam: { target: tg, set(dist, theta, phi) { rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
+    cam: { target: tg, set(dist, theta, phi) { tgTarget.copy(tg); rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
   onClock(clock.currentTelemetrySample, clock);
   setTimeout(fillJump, 0);                              // after the first paint (the scan takes a fraction of a second)
 }

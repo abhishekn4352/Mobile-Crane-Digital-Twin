@@ -1,8 +1,11 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mobile Crane - Telemetry Playback (3D visual test)</title>
-<!--
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mobile Crane - Telemetry Playback (3D visual test)</title>
+  <!--
   Cycle 3 - visual layer test page.
   Drives the 3D crane (js/crane3d.js) from the real telemetry CSV through
   Ajit's PlaybackClock (js/playbackClock.js). Nothing here computes capacity,
@@ -17,236 +20,474 @@
   Run from the repository root:   python -m http.server 8000
   Open:                           http://localhost:8000/Cycle-3/crane3d-demo.html
 -->
-<style>
-:root{--bg:#15181c;--pn:#1d2025;--ln:#3a3f47;--tx:#ebe8e2;--mu:#9aa0a8;--ac:#f4b400;--red:#ef5350;--grn:#2ecc71}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
-canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
-canvas:active{cursor:grabbing}
-.box{position:absolute;background:rgba(29,32,37,.92);border:1px solid var(--ln);border-radius:6px;padding:8px 12px}
-#ttl{left:12px;top:12px;pointer-events:none}
-#ttl b{font-size:16px}#ttl span{display:block;color:var(--mu);font-size:12px}
-#info{right:12px;top:12px;min-width:230px;font-variant-numeric:tabular-nums}
-#info .row{display:flex;justify-content:space-between;gap:16px;margin:2px 0}
-#info .row span:first-child{color:var(--mu)}
-#info .big{font-size:22px;font-weight:600;margin-bottom:4px}
-#info .evt{color:var(--ac);min-height:1.4em}
-#ctl{left:12px;bottom:12px;width:330px;max-width:calc(100% - 24px)}
-#ctl .line{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
-button{background:var(--ac);color:#17140a;border:0;border-radius:4px;padding:6px 11px;font:600 13px inherit;cursor:pointer}
-button.g{background:transparent;color:var(--tx);border:1px solid var(--ln)}
-button.g.on{background:var(--ac);color:#17140a;border-color:var(--ac)}
-select,input[type=range]{width:100%;accent-color:var(--ac)}
-select{background:var(--pn);color:var(--tx);border:1px solid var(--ln);border-radius:4px;padding:5px}
-label.c{display:inline-flex;gap:6px;align-items:center;color:var(--mu);font-size:13px}
-#err{display:none;left:50%;top:40%;transform:translateX(-50%);max-width:460px;border-color:var(--red)}
-.bad{color:var(--red)}
-</style></head><body>
+  <style>
+    :root {
+      --bg: #15181c;
+      --pn: #1d2025;
+      --ln: #3a3f47;
+      --tx: #ebe8e2;
+      --mu: #9aa0a8;
+      --ac: #f4b400;
+      --red: #ef5350;
+      --grn: #2ecc71
+    }
 
-<div id="ttl" class="box"><b>Mobile crane - telemetry playback</b><span>3D visual layer test · drag to orbit · scroll to zoom</span></div>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--tx);
+      font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden
+    }
 
-<div id="info" class="box">
-  <div class="big" id="i_ts">--:--:--</div>
-  <div class="evt" id="i_evt"></div>
-  <div class="row"><span>Mode</span><span id="i_mode">-</span></div>
-  <div class="row"><span>Load</span><span id="i_load">-</span></div>
-  <div class="row"><span>Boom length</span><span id="i_len">-</span></div>
-  <div class="row"><span>Boom angle</span><span id="i_ang">-</span></div>
-  <div class="row"><span>Radius (data)</span><span id="i_rad">-</span></div>
-  <div class="row"><span>Slew</span><span id="i_slew">-</span></div>
-  <div class="row" title="Real value from the CSV. The kit alert threshold is 36 km/h."><span>Wind</span><span id="i_wind">-</span></div>
-  <div class="row" title="VISUAL ONLY. The wind speed is real; the sway size, period and direction are illustrative (the kit has no load area, rope length or wind direction)."><span>Load sway (visual)</span><span id="i_sway">-</span></div>
-  <div class="row"><span>Outriggers</span><span id="i_out">-</span></div>
-  <div class="row" title="Distance between the hook in the 3D model and the load point drawn from radius_m + slew_deg. About 0 on normal rows; large on impossible rows."><span>Hook ↔ green marker</span><span id="i_gap">-</span></div>
-</div>
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: grab
+    }
 
-<div id="ctl" class="box">
-  <div class="line">
-    <button id="b_play">Play</button>
-    <span id="rates"></span>
+    canvas:active {
+      cursor: grabbing
+    }
+
+    .box {
+      position: absolute;
+      background: rgba(29, 32, 37, .92);
+      border: 1px solid var(--ln);
+      border-radius: 6px;
+      padding: 8px 12px
+    }
+
+    #ttl {
+      left: 12px;
+      top: 12px;
+      pointer-events: none
+    }
+
+    #ttl b {
+      font-size: 16px
+    }
+
+    #ttl span {
+      display: block;
+      color: var(--mu);
+      font-size: 12px
+    }
+
+    #info {
+      right: 12px;
+      top: 12px;
+      min-width: 230px;
+      font-variant-numeric: tabular-nums
+    }
+
+    #info .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 2px 0
+    }
+
+    #info .row span:first-child {
+      color: var(--mu)
+    }
+
+    #info .big {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 4px
+    }
+
+    #info .evt {
+      color: var(--ac);
+      min-height: 1.4em
+    }
+
+    #ctl {
+      left: 12px;
+      bottom: 12px;
+      width: 330px;
+      max-width: calc(100% - 24px)
+    }
+
+    #ctl .line {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 6px 0
+    }
+
+    button {
+      background: var(--ac);
+      color: #17140a;
+      border: 0;
+      border-radius: 4px;
+      padding: 6px 11px;
+      font: 600 13px inherit;
+      cursor: pointer
+    }
+
+    button.g {
+      background: transparent;
+      color: var(--tx);
+      border: 1px solid var(--ln)
+    }
+
+    button.g.on {
+      background: var(--ac);
+      color: #17140a;
+      border-color: var(--ac)
+    }
+
+    select,
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--ac)
+    }
+
+    select {
+      background: var(--pn);
+      color: var(--tx);
+      border: 1px solid var(--ln);
+      border-radius: 4px;
+      padding: 5px
+    }
+
+    label.c {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      color: var(--mu);
+      font-size: 13px
+    }
+
+    #err {
+      display: none;
+      left: 50%;
+      top: 40%;
+      transform: translateX(-50%);
+      max-width: 460px;
+      border-color: var(--red)
+    }
+
+    .bad {
+      color: var(--red)
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="ttl" class="box"><b>Mobile crane - telemetry playback</b><span>3D visual layer test · drag to orbit · scroll
+      to zoom</span></div>
+
+  <div id="info" class="box">
+    <div class="big" id="i_ts">--:--:--</div>
+    <div class="evt" id="i_evt"></div>
+    <div class="row"><span>Mode</span><span id="i_mode">-</span></div>
+    <div class="row"><span>Load</span><span id="i_load">-</span></div>
+    <div class="row"><span>Boom length</span><span id="i_len">-</span></div>
+    <div class="row"><span>Boom angle</span><span id="i_ang">-</span></div>
+    <div class="row"><span>Radius (data)</span><span id="i_rad">-</span></div>
+    <div class="row"><span>Slew</span><span id="i_slew">-</span></div>
+    <div class="row" title="Real value from the CSV. The kit alert threshold is 36 km/h."><span>Wind</span><span
+        id="i_wind">-</span></div>
+    <div class="row"
+      title="VISUAL ONLY. The wind speed is real; the sway size, period and direction are illustrative (the kit has no load area, rope length or wind direction).">
+      <span>Load sway (visual)</span><span id="i_sway">-</span></div>
+    <div class="row"><span>Outriggers</span><span id="i_out">-</span></div>
+    <div class="row"
+      title="Distance between the hook in the 3D model and the load point drawn from radius_m + slew_deg. About 0 on normal rows; large on impossible rows.">
+      <span>Hook ↔ green marker</span><span id="i_gap">-</span></div>
   </div>
-  <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in recording">
-  <div class="line"><select id="jump" aria-label="Jump to"></select></div>
-  <div class="line"><label class="c"><input type="checkbox" id="auto">Auto-rotate camera</label></div>
-</div>
 
-<div id="err" class="box"></div>
-<script>
-  // Shows any script problem on the page instead of leaving a silent blank screen.
-  window.showErr = function (html) { var e = document.getElementById('err'); e.style.display = 'block'; e.innerHTML += '<div>' + html + '</div>'; };
-  window.addEventListener('error', function (ev) { if (/missing modules|three\.js missing/.test(ev.message)) return; window.showErr('Script error: ' + ev.message); });
-  window.addEventListener('unhandledrejection', function (ev) { window.showErr('Error: ' + ((ev.reason && ev.reason.message) || ev.reason)); });
-</script>
+  <div id="ctl" class="box">
+    <div class="line">
+      <button id="b_play">Play</button>
+      <span id="rates"></span>
+    </div>
+    <div id="view-btns">
+      <button id="v_top" class="g" title="Top View">🔝 Top</button>
+      <button id="v_side" class="g" title="Side View">📐 Side</button>
+      <button id="v_front" class="g" title="Front View">📷 Front</button>
+      <button id="v_reset" class="g" title="Reset View">⟲ Reset</button>
+    </div>
+    <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in recording">
+    <div class="line"><select id="jump" aria-label="Jump to"></select></div>
+    <div class="line"><label class="c"><input type="checkbox" id="auto">Auto-rotate camera</label></div>
+  </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script type="module">
-const $ = (id) => document.getElementById(id);
-function fail(msg) { window.showErr(msg); }
+  <div id="err" class="box"></div>
+  <script>
+    // Shows any script problem on the page instead of leaving a silent blank screen.
+    window.showErr = function (html) { var e = document.getElementById('err'); e.style.display = 'block'; e.innerHTML += '<div>' + html + '</div>'; };
+    window.addEventListener('error', function (ev) { if (/missing modules|three\.js missing/.test(ev.message)) return; window.showErr('Script error: ' + ev.message); });
+    window.addEventListener('unhandledrejection', function (ev) { window.showErr('Error: ' + ((ev.reason && ev.reason.message) || ev.reason)); });
+  </script>
 
-if (typeof THREE === 'undefined') {
-  fail('three.js did not load from cdnjs.cloudflare.com. Check the internet connection or any ad-blocker / Brave Shields, then reload.');
-  throw new Error('three.js missing');
-}
-const T = THREE;
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    function fail(msg) { window.showErr(msg); }
 
-// The page needs three files from the repository. They are loaded one by one so a
-// missing file is named on screen instead of leaving a blank page.
-const missing = [];
-const need = async (path) => { try { return await import(path); } catch (e) { console.error(path, e); missing.push(path); return {}; } };
-const { parseCSV, PlaybackClock, PLAYBACK_RATES } = await need('./js/playbackClock.js');
-const { createCrane3D, createGroundOverlay, buildOutriggerTimeline, poseFromSample } = await need('./js/crane3d.js');
-const { loadGroundPosition, supportPolygon } = await need('./js/craneModel.js');   // Module 3: the one source of kit geometry
-if (missing.length) {
-  fail('Missing or broken file(s):<br><code>' + missing.join('</code><br><code>') + '</code><br>Serve the <b>repository root</b> (<code>python -m http.server 8000</code> run inside the repo folder) and open <code>/Cycle-3/crane3d-demo.html</code>, or use the stand-alone bundle that already contains these files.');
-  throw new Error('missing modules: ' + missing.join(', '));
-}
+    if (typeof THREE === 'undefined') {
+      fail('three.js did not load from cdnjs.cloudflare.com. Check the internet connection or any ad-blocker / Brave Shields, then reload.');
+      throw new Error('three.js missing');
+    }
+    const T = THREE;
 
-// Kit outrigger layout (pads at +-3.9 m, +-4.45 m) comes from Module 3, not from a private copy.
-const POLYGON = supportPolygon();
+    // The page needs three files from the repository. They are loaded one by one so a
+    // missing file is named on screen instead of leaving a blank page.
+    const missing = [];
+    const need = async (path) => { try { return await import(path); } catch (e) { console.error(path, e); missing.push(path); return {}; } };
+    const { parseCSV, PlaybackClock, PLAYBACK_RATES } = await need('./js/playbackClock.js');
+    const { createCrane3D, createGroundOverlay, buildOutriggerTimeline, poseFromSample } = await need('./js/crane3d.js');
+    const { loadGroundPosition, supportPolygon } = await need('./js/craneModel.js');   // Module 3: the one source of kit geometry
+    if (missing.length) {
+      fail('Missing or broken file(s):<br><code>' + missing.join('</code><br><code>') + '</code><br>Serve the <b>repository root</b> (<code>python -m http.server 8000</code> run inside the repo folder) and open <code>/Cycle-3/crane3d-demo.html</code>, or use the stand-alone bundle that already contains these files.');
+      throw new Error('missing modules: ' + missing.join(', '));
+    }
+
+    // Kit outrigger layout (pads at +-3.9 m, +-4.45 m) comes from Module 3, not from a private copy.
+    const POLYGON = supportPolygon();
 
 
-// ---------------------------------------------------------------- scene
-const R = new T.WebGLRenderer({ antialias: true });
-R.setPixelRatio(Math.min(devicePixelRatio, 2));
-R.shadowMap.enabled = true; R.shadowMap.type = T.PCFSoftShadowMap;
-R.outputEncoding = T.sRGBEncoding; R.toneMapping = T.ACESFilmicToneMapping; R.toneMappingExposure = 1.1;
-document.body.prepend(R.domElement);
+    // ---------------------------------------------------------------- scene
+    const R = new T.WebGLRenderer({ antialias: true });
+    R.setPixelRatio(Math.min(devicePixelRatio, 2));
+    R.shadowMap.enabled = true; R.shadowMap.type = T.PCFSoftShadowMap;
+    R.outputEncoding = T.sRGBEncoding; R.toneMapping = T.ACESFilmicToneMapping; R.toneMappingExposure = 1.1;
+    document.body.prepend(R.domElement);
 
-const S = new T.Scene();
-S.background = new T.Color(0xaec8de);
-S.fog = new T.Fog(0xaec8de, 230, 520);
-const C = new T.PerspectiveCamera(36, 1, .5, 700);
-S.add(new T.HemisphereLight(0xdfeaff, 0x6b5d4a, 1.1));
-const D = new T.DirectionalLight(0xfff0d8, 1.9);
-D.position.set(40, 70, 30); D.castShadow = true; D.shadow.mapSize.set(4096, 4096);
-Object.assign(D.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 220 });
-D.shadow.bias = -.0004; S.add(D);
-const D2 = new T.DirectionalLight(0x9fb8ff, .7); D2.position.set(-30, 20, -25); S.add(D2);
+    const S = new T.Scene();
+    S.background = new T.Color(0xaec8de);
+    S.fog = new T.Fog(0xaec8de, 230, 520);
+    const C = new T.PerspectiveCamera(36, 1, .5, 700);
+    S.add(new T.HemisphereLight(0xdfeaff, 0x6b5d4a, 1.1));
+    const D = new T.DirectionalLight(0xfff0d8, 1.9);
+    D.position.set(40, 70, 30); D.castShadow = true; D.shadow.mapSize.set(4096, 4096);
+    Object.assign(D.shadow.camera, { left: -75, right: 75, top: 75, bottom: -75, near: 1, far: 220 });
+    D.shadow.bias = -.0004; S.add(D);
+    const D2 = new T.DirectionalLight(0x9fb8ff, .7); D2.position.set(-30, 20, -25); S.add(D2);
 
-// Plain working ground - no buildings, containers or props.
-const ground = new T.Mesh(new T.CircleGeometry(320, 72), new T.MeshStandardMaterial({ color: 0x5e5a50, roughness: .95 }));
-ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; S.add(ground);
-const pad = new T.Mesh(new T.CircleGeometry(60, 64), new T.MeshStandardMaterial({ color: 0x8a7557, roughness: 1 }));
-pad.rotation.x = -Math.PI / 2; pad.position.y = .02; pad.receiveShadow = true; S.add(pad);
+    // Plain working ground - no buildings, containers or props.
+    const ground = new T.Mesh(new T.CircleGeometry(320, 72), new T.MeshStandardMaterial({ color: 0x5e5a50, roughness: .95 }));
+    ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; S.add(ground);
+    const pad = new T.Mesh(new T.CircleGeometry(60, 64), new T.MeshStandardMaterial({ color: 0x8a7557, roughness: 1 }));
+    pad.rotation.x = -Math.PI / 2; pad.position.y = .02; pad.receiveShadow = true; S.add(pad);
 
-const crane = createCrane3D(T, S, { padHalfX: POLYGON[1].x, padHalfZ: POLYGON[2].z });
-const overlay = createGroundOverlay(T, S, POLYGON);
+    const crane = createCrane3D(T, S, { padHalfX: POLYGON[1].x, padHalfZ: POLYGON[2].z });
+    const overlay = createGroundOverlay(T, S, POLYGON);
 
-// ---------------------------------------------------------------- camera (orbit)
-const tg = new T.Vector3(0, 22, 0);
-let th = .75, ph = 1.2, r = 130, rT = 130, auto = false;   // wide enough for a 50 m boom
-const P = new Map();
-R.domElement.onpointerdown = (e) => { R.domElement.setPointerCapture(e.pointerId); P.set(e.pointerId, e); };
-R.domElement.onpointerup = R.domElement.onpointercancel = (e) => P.delete(e.pointerId);
-R.domElement.onpointermove = (e) => {
-  const o = P.get(e.pointerId); if (!o) return;
-  if (P.size === 1) { th -= (e.clientX - o.clientX) * .006; ph = Math.min(1.5, Math.max(.12, ph - (e.clientY - o.clientY) * .006)); }
-  else if (P.size === 2) {
-    const q = [...P.values()], a = Math.hypot(q[0].clientX - q[1].clientX, q[0].clientY - q[1].clientY);
-    P.set(e.pointerId, e);
-    const q2 = [...P.values()], b = Math.hypot(q2[0].clientX - q2[1].clientX, q2[0].clientY - q2[1].clientY);
-    rT = Math.min(230, Math.max(12, rT * a / Math.max(b, 1))); return;
-  }
-  P.set(e.pointerId, e);
-};
-R.domElement.addEventListener('wheel', (e) => { e.preventDefault(); rT = Math.min(230, Math.max(12, rT * Math.exp(e.deltaY * .001))); }, { passive: false });
-function size() { R.setSize(innerWidth, innerHeight); C.aspect = innerWidth / innerHeight; C.updateProjectionMatrix(); }
-addEventListener('resize', size); size();
-$('auto').onchange = () => { auto = $('auto').checked; };
+    // ---------------------------------------------------------------- camera (orbit) + cursor zoom
+    const tg = new T.Vector3(0, 6, 0);
+    const tgTarget = new T.Vector3(0, 6, 0);
+    let th = .75, ph = 1.25, r = 130, rT = 130, auto = false;   // wide enough for a 50 m boom
+    const P = new Map();
+    const raycaster = new T.Raycaster();
+    const mouse = new T.Vector2();
+    const hitPoint = new T.Vector3();
+    const hitPlane = new T.Plane();
+    const camDir = new T.Vector3();
 
-let last = performance.now();
-function loop(n) {
-  requestAnimationFrame(loop);
-  const dt = Math.min(.05, (n - last) / 1e3); last = n;
-  if (auto && !P.size) th += dt * .1;
-  r += (rT - r) * .06;
-  crane.tick(n / 1000);                                  // wind sway animation (screen time, not telemetry time)
-  const sw = crane.swayDeg();
-  $('i_sway').textContent = 'along ' + sw.along.toFixed(1) + '° · across ' + sw.cross.toFixed(1) + '°';
-  C.position.set(tg.x + r * Math.sin(ph) * Math.cos(th), tg.y + r * Math.cos(ph), tg.z + r * Math.sin(ph) * Math.sin(th));
-  C.lookAt(tg);
-  R.render(S, C);
-  if (window.__twin && window.__twin.clock) syncControls();
-}
-requestAnimationFrame(loop);
+    R.domElement.oncontextmenu = (e) => e.preventDefault();
 
-// ---------------------------------------------------------------- telemetry
-let clock = null, rows = null, timeline = null, scrubbing = false;
-const fmt = (v, d = 1, u = '') => (Number.isFinite(v) ? v.toFixed(d) + u : '-');
+    R.domElement.onpointerdown = (e) => { 
+      R.domElement.setPointerCapture(e.pointerId); 
+      P.set(e.pointerId, e); 
+      clearActiveView();
+    };
+    R.domElement.onpointerup = R.domElement.onpointercancel = (e) => P.delete(e.pointerId);
+    R.domElement.onpointermove = (e) => {
+      const o = P.get(e.pointerId); if (!o) return;
+      if (e.buttons === 2) {
+        camDir.subVectors(tg, C.position).normalize();
+        const right = new T.Vector3().crossVectors(camDir, C.up).normalize();
+        const up = new T.Vector3().crossVectors(right, camDir).normalize();
+        const panSpeed = (r / 600);
+        const dx = (e.clientX - o.clientX) * panSpeed;
+        const dy = (e.clientY - o.clientY) * panSpeed;
+        tgTarget.addScaledVector(right, -dx);
+        tgTarget.addScaledVector(up, dy);
+        tg.copy(tgTarget);
+      } else if (P.size === 1) { 
+        th -= (e.clientX - o.clientX) * .006; 
+        ph = Math.min(1.5, Math.max(.12, ph - (e.clientY - o.clientY) * .006)); 
+      }
+      P.set(e.pointerId, e);
+    };
 
-function apply(sample) {
-  const pose = poseFromSample(sample, timeline);
-  crane.setPose(pose);
+    // Zoom to Mouse Cursor
+    R.domElement.addEventListener('wheel', (e) => { 
+      e.preventDefault(); 
+      clearActiveView();
 
-  const g = loadGroundPosition(sample.radius_m, sample.slew_deg);     // from DATA, not from the model
-  if (Number.isFinite(g.x) && Number.isFinite(g.z)) overlay.setLoadPoint(g.x, g.z);
-  const head = crane.headWorld();
-  const gap = Number.isFinite(g.x) ? Math.hypot(head.x - g.x, head.z - g.z) : NaN;
+      const rect = R.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
-  $('i_ts').textContent = sample.ts.slice(11, 19);
-  $('i_evt').textContent = sample.event ? 'device event: ' + sample.event : '';
-  $('i_load').textContent = fmt(sample.load_t, 1, ' t');
-  $('i_len').textContent = fmt(sample.boom_length_m, 1, ' m');
-  $('i_ang').textContent = fmt(sample.boom_angle_deg, 1, '°');
-  $('i_rad').textContent = fmt(sample.radius_m, 1, ' m');
-  $('i_slew').textContent = fmt(sample.slew_deg, 0, '°');
-  $('i_wind').textContent = fmt(sample.wind_kmh, 0, ' km/h') + (sample.wind_kmh > 36 ? '  ALERT' : '');
-  $('i_wind').className = sample.wind_kmh > 36 ? 'bad' : '';
-  $('i_out').textContent = sample.outrigger_state + (Number.isFinite(pose.outriggerExt) ? ' ' + Math.round(pose.outriggerExt * 100) + '%' : '');
-  $('i_gap').textContent = fmt(gap, 1, ' m');
-  $('i_gap').className = gap > 1 ? 'bad' : '';
-  $('i_mode').textContent = clock ? clock.mode : '-';
-}
+      raycaster.setFromCamera(mouse, C);
 
-function syncControls() {
-  const c = window.__twin.clock;
-  $('b_play').textContent = c.playing ? 'Pause' : 'Play';
-  if (!scrubbing) $('scrub').value = c.currentIndex;
-  document.querySelectorAll('#rates button').forEach((b) => b.classList.toggle('on', +b.dataset.rate === c.rate));
-}
+      const hits = raycaster.intersectObjects(S.children, true);
+      let found = false;
+      if (hits.length > 0) {
+        for (const h of hits) {
+          if (h.point && Number.isFinite(h.point.x)) {
+            hitPoint.copy(h.point);
+            found = true;
+            break;
+          }
+        }
+      }
 
-async function start() {
-  let text;
-  try {
-    const res = await fetch('./data/mobile-telemetry-2026-09-16.csv');
-    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
-    text = await res.text();
-  } catch (e) {
-    fail('Could not load <code>data/mobile-telemetry-2026-09-16.csv</code> (' + e.message + ').<br>Run <code>python -m http.server 8000</code> in the repository root and open <code>http://localhost:8000/Cycle-3/crane3d-demo.html</code>.');
-    return;
-  }
-  rows = parseCSV(text);
-  timeline = buildOutriggerTimeline(rows);
-  clock = new PlaybackClock(rows, (sample) => apply(sample));
-  clock.setRate(10);
+      if (!found) {
+        camDir.subVectors(tg, C.position).normalize();
+        hitPlane.setFromNormalAndCoplanarPoint(camDir, tg);
+        if (!raycaster.ray.intersectPlane(hitPlane, hitPoint)) {
+          hitPoint.copy(tg);
+        }
+      }
 
-  // controls
-  PLAYBACK_RATES.forEach((rate) => {
-    const b = document.createElement('button'); b.className = 'g'; b.dataset.rate = rate; b.textContent = rate + '×';
-    b.onclick = () => clock.setRate(rate); $('rates').appendChild(b);
-  });
-  $('b_play').onclick = () => clock.togglePlay();
-  const scrub = $('scrub'); scrub.max = clock.totalRows - 1;
-  scrub.onpointerdown = () => { scrubbing = true; };
-  scrub.onpointerup = () => { scrubbing = false; };
-  scrub.oninput = () => clock.jumpTo(rows[+scrub.value].ts);
+      hitPoint.x = Math.min(80, Math.max(-80, hitPoint.x));
+      hitPoint.y = Math.min(65, Math.max(0, hitPoint.y));
+      hitPoint.z = Math.min(80, Math.max(-80, hitPoint.z));
 
-  const jump = $('jump');
-  const add = (label, ts) => { const o = document.createElement('option'); o.value = ts; o.textContent = label; jump.appendChild(o); };
-  add('Jump to…', '');
-  rows.filter((x) => x.event).forEach((x) => add(x.ts.slice(11, 19) + '  ' + x.event, x.ts));
-  const mark = (hms, why) => { const x = rows.find((q) => q.ts.includes('T' + hms)); if (x) add(hms + '  ' + why, x.ts); };
-  mark('07:03:00', 'hoist while outriggers still DEPLOYING');
-  mark('12:37:30', 'outriggers retracting');
-  mark('14:30:00', 'impossible row: radius 40 m');
-  mark('15:00:00', 'impossible row: boom 70 m');
-  mark('15:30:00', 'impossible row: load -3 t, pads 0');
-  mark('17:00:00', 'impossible row: angle 95°');
-  jump.onchange = () => { if (jump.value) clock.jumpTo(jump.value); jump.selectedIndex = 0; };
+      const zoomFactor = Math.exp(e.deltaY * 0.001);
+      const oldR = rT;
+      rT = Math.min(230, Math.max(12, rT * zoomFactor));
 
-  window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, apply,
-    cam: { target: tg, set(dist, theta, phi) { rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
-  apply(clock.currentTelemetrySample);
-}
-start();
-</script>
-</body></html>
+      if (e.deltaY < 0) {
+        const shiftRatio = Math.min(0.45, (oldR - rT) / oldR);
+        tgTarget.lerp(hitPoint, shiftRatio);
+      } else if (e.deltaY > 0) {
+        const defaultCenter = new T.Vector3(0, 6, 0);
+        const shiftRatio = Math.min(0.25, (rT - oldR) / rT);
+        tgTarget.lerp(defaultCenter, shiftRatio);
+      }
+    }, { passive: false });
+
+    function size() { R.setSize(innerWidth, innerHeight); C.aspect = innerWidth / innerHeight; C.updateProjectionMatrix(); }
+    addEventListener('resize', size); size();
+    $('auto').onchange = () => { auto = $('auto').checked; };
+
+    let last = performance.now();
+    function loop(n) {
+      requestAnimationFrame(loop);
+      const dt = Math.min(.05, (n - last) / 1e3); last = n;
+      if (auto && !P.size) th += dt * .1;
+      r += (rT - r) * .08;
+
+      tg.lerp(tgTarget, 0.1);
+
+      crane.tick(n / 1000);                                  // wind sway animation (screen time, not telemetry time)
+      const sw = crane.swayDeg();
+      $('i_sway').textContent = 'along ' + sw.along.toFixed(1) + '° · across ' + sw.cross.toFixed(1) + '°';
+      C.position.set(tg.x + r * Math.sin(ph) * Math.cos(th), tg.y + r * Math.cos(ph), tg.z + r * Math.sin(ph) * Math.sin(th));
+      C.lookAt(tg);
+      R.render(S, C);
+      if (window.__twin && window.__twin.clock) syncControls();
+    }
+    requestAnimationFrame(loop);
+
+    // view-preset buttons
+    const vBtns = { top: $('v_top'), side: $('v_side'), front: $('v_front'), reset: $('v_reset') };
+    function clearActiveView() {
+      ['top', 'side', 'front', 'reset'].forEach(k => vBtns[k]?.classList.remove('on'));
+    }
+    if (vBtns.top) {
+      vBtns.top.onclick = () => { clearActiveView(); vBtns.top.classList.add('on'); tgTarget.set(0, 4, 0); th = 0; ph = 0.08; rT = 100; };
+      vBtns.side.onclick = () => { clearActiveView(); vBtns.side.classList.add('on'); tgTarget.set(0, 6, 0); th = 0; ph = 1.45; rT = 110; };
+      vBtns.front.onclick = () => { clearActiveView(); vBtns.front.classList.add('on'); tgTarget.set(0, 6, 0); th = Math.PI / 2; ph = 1.45; rT = 110; };
+      vBtns.reset.onclick = () => { clearActiveView(); vBtns.reset.classList.add('on'); tgTarget.set(0, 6, 0); th = 0.75; ph = 1.25; rT = 130; };
+    }
+
+    // ---------------------------------------------------------------- telemetry
+    let clock = null, rows = null, timeline = null, scrubbing = false;
+    const fmt = (v, d = 1, u = '') => (Number.isFinite(v) ? v.toFixed(d) + u : '-');
+
+    function apply(sample) {
+      const pose = poseFromSample(sample, timeline);
+      crane.setPose(pose);
+
+      const g = loadGroundPosition(sample.radius_m, sample.slew_deg);     // from DATA, not from the model
+      if (Number.isFinite(g.x) && Number.isFinite(g.z)) overlay.setLoadPoint(g.x, g.z);
+      const head = crane.headWorld();
+      const gap = Number.isFinite(g.x) ? Math.hypot(head.x - g.x, head.z - g.z) : NaN;
+
+      $('i_ts').textContent = sample.ts.slice(11, 19);
+      $('i_evt').textContent = sample.event ? 'device event: ' + sample.event : '';
+      $('i_load').textContent = fmt(sample.load_t, 1, ' t');
+      $('i_len').textContent = fmt(sample.boom_length_m, 1, ' m');
+      $('i_ang').textContent = fmt(sample.boom_angle_deg, 1, '°');
+      $('i_rad').textContent = fmt(sample.radius_m, 1, ' m');
+      $('i_slew').textContent = fmt(sample.slew_deg, 0, '°');
+      $('i_wind').textContent = fmt(sample.wind_kmh, 0, ' km/h') + (sample.wind_kmh > 36 ? '  ALERT' : '');
+      $('i_wind').className = sample.wind_kmh > 36 ? 'bad' : '';
+      $('i_out').textContent = sample.outrigger_state + (Number.isFinite(pose.outriggerExt) ? ' ' + Math.round(pose.outriggerExt * 100) + '%' : '');
+      $('i_gap').textContent = fmt(gap, 1, ' m');
+      $('i_gap').className = gap > 1 ? 'bad' : '';
+      $('i_mode').textContent = clock ? clock.mode : '-';
+    }
+
+    function syncControls() {
+      const c = window.__twin.clock;
+      $('b_play').textContent = c.playing ? 'Pause' : 'Play';
+      if (!scrubbing) $('scrub').value = c.currentIndex;
+      document.querySelectorAll('#rates button').forEach((b) => b.classList.toggle('on', +b.dataset.rate === c.rate));
+    }
+
+    async function start() {
+      let text;
+      try {
+        const res = await fetch('./data/mobile-telemetry-2026-09-16.csv');
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        text = await res.text();
+      } catch (e) {
+        fail('Could not load <code>data/mobile-telemetry-2026-09-16.csv</code> (' + e.message + ').<br>Run <code>python -m http.server 8000</code> in the repository root and open <code>http://localhost:8000/Cycle-3/crane3d-demo.html</code>.');
+        return;
+      }
+      rows = parseCSV(text);
+      timeline = buildOutriggerTimeline(rows);
+      clock = new PlaybackClock(rows, (sample) => apply(sample));
+      clock.setRate(10);
+
+      // controls
+      PLAYBACK_RATES.forEach((rate) => {
+        const b = document.createElement('button'); b.className = 'g'; b.dataset.rate = rate; b.textContent = rate + '×';
+        b.onclick = () => clock.setRate(rate); $('rates').appendChild(b);
+      });
+      $('b_play').onclick = () => clock.togglePlay();
+      const scrub = $('scrub'); scrub.max = clock.totalRows - 1;
+      scrub.onpointerdown = () => { scrubbing = true; };
+      scrub.onpointerup = () => { scrubbing = false; };
+      scrub.oninput = () => clock.jumpTo(rows[+scrub.value].ts);
+
+      const jump = $('jump');
+      const add = (label, ts) => { const o = document.createElement('option'); o.value = ts; o.textContent = label; jump.appendChild(o); };
+      add('Jump to…', '');
+      rows.filter((x) => x.event).forEach((x) => add(x.ts.slice(11, 19) + '  ' + x.event, x.ts));
+      const mark = (hms, why) => { const x = rows.find((q) => q.ts.includes('T' + hms)); if (x) add(hms + '  ' + why, x.ts); };
+      mark('07:03:00', 'hoist while outriggers still DEPLOYING');
+      mark('12:37:30', 'outriggers retracting');
+      mark('14:30:00', 'impossible row: radius 40 m');
+      mark('15:00:00', 'impossible row: boom 70 m');
+      mark('15:30:00', 'impossible row: load -3 t, pads 0');
+      mark('17:00:00', 'impossible row: angle 95°');
+      jump.onchange = () => { if (jump.value) clock.jumpTo(jump.value); jump.selectedIndex = 0; };
+
+      window.__twin = {
+        THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, apply,
+        cam: { target: tg, set(dist, theta, phi) { rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } }
+      };
+      apply(clock.currentTelemetrySample);
+    }
+    start();
+  </script>
+</body>
+
+</html>
