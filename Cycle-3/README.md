@@ -383,19 +383,23 @@ All modules must use the tested Module 3 calculations.
 
 **Module Owner: Abhishek**
 
+(Paste this over the existing "Module 4" section of `Cycle-3/README.md`.)
+
 ### 1. Module Responsibility
 
 The Sensor Panel & Alarm UI module shows the state of the crane and its alarms, and a 3D view of the crane. It only shows data. It does not calculate chart or stability values itself.
 
 - Sensor panel from the active telemetry sample: load, boom angle, boom length, radius, slew, outrigger state, hydraulic pressure, wind, and the four pad reactions.
 - Rated capacity, utilisation and stability verdict, taken from the failure detector's `derived` block, which gets them from Module 3 (`js/craneModel.js`, over the Cycle-2 chart and stability code). No second copy of chart or stability code: the kit constants, the radius formula, the support polygon and the ground position of the load are imported from `craneModel.js`.
-- A **LIVE (telemetry) / MANUAL (override)** badge that is always visible. Touching a slider switches to MANUAL (badge turns amber, alarms are labelled SIMULATED). "Return to LIVE" switches back.
+- A **LIVE / MANUAL switch** in the control dock, and a **LIVE (telemetry) / MANUAL (override)** badge that is always visible. In LIVE the dock shows only the playback controls (play / pause, speed, position, jump) and no sliders. In MANUAL it shows only the sliders and no playback controls; the recording is paused, the badge turns amber and alarms are labelled SIMULATED. The LIVE button (or "Return to LIVE" in the header) goes back and carries on from the same row.
 - A **data-quality** badge: `OK` / `STALE` (dropout or repeated timestamp) / `BAD DATA` (an impossible row). BAD DATA and STALE are shown as data problems, never as crane failures.
+- **NO DATA · dropout in progress**: the clock follows the CSV's own `ts`, so inside the 15:20:00–15:24:59 gap it publishes nothing. The panel then says NO DATA, counts the seconds up to the next sample, and greys the sensor values (they are the last ones received).
 - An **alarm list**: one latched entry per alarm episode, with the alarm type, the triggering value, the rule that fired and the **first timestamp** at which it became true. Active alarms are highlighted, cleared ones greyed.
 - Device chips from `status_word` and wind: WIND ALERT, LMI BYPASS, LMI PRE-WARN, A2B.
 - **NOT PERMITTED** instead of a number when the chart has no capacity.
 - A 3D view (`js/crane3d.js`) driven by the same sample: boom length and angle, slew, outrigger deployment, hook height, and a load that **sways with the wind**.
 - A list of clock faults in the CSV (file order): the 15:20–15:25 dropout and the repeated / backwards timestamps.
+- A **Jump to** list that is *derived*, not typed: when the page loads, the recording is scanned once with the same detector and alarm log as the playback, and every alarm episode is listed with its true first timestamp. (A live feed has no such list; there the alarm log simply fills as rows arrive.)
 
 Look and feel: dark graphite, off-white, crane yellow; the CSS variables `--dark-surface`, `--crane-yellow`, `--green-ok`, `--amber`, `--red-crit`.
 
@@ -403,8 +407,8 @@ Look and feel: dark graphite, off-white, crane yellow; the CSS variables `--dark
 
 | File | What it does |
 |---|---|
-| `simulator.html` | The page: sensors, 3D view, playback controls, sliders, alarm list, clock faults |
-| `js/panelModel.js` | Logic, no DOM: analyses a sample, keeps the alarm log, builds the text and colour of every element |
+| `simulator.html` | The page: sensors, 3D view, LIVE / MANUAL switch with its playback controls and sliders, alarm list, clock faults |
+| `js/panelModel.js` | Logic, no DOM: analyses a sample, keeps the alarm log, builds the text and colour of every element, `dropoutStatus` (NO DATA), `buildEventIndex` (the Jump list) |
 | `js/panel.js` | Draws the model into the page (`textContent` only) |
 | `js/dataQuality.js` | OK / STALE / BAD DATA rules and the file-order clock-fault scan |
 | `js/crane3d.js` | 3D crane (view only) and the wind sway |
@@ -413,15 +417,15 @@ Look and feel: dark graphite, off-white, crane yellow; the CSS variables `--dark
 
 ### 3. Inputs (interfaces with other modules)
 
-- Module 1 (Ajit): `PlaybackClock` (`currentIndex`, `playing`, `jumpTo`, `setManual`, `setLive`, `pushManualSample`).
+- Module 1 (Ajit): `PlaybackClock` (`currentIndex`, `playing`, `rate`, `jumpTo`, `setManual`, `setLive`, `pushManualSample`) and `parseCSV`. The clock advances by the real `ts` gap between rows.
 - Module 2 (Rushikesh): `detectFailures(sample, previousSample)` and `expectedHydraulicPressure`. The panel uses its alarms as they are (OVERLOAD, STABILITY_LOSS, OUTRIGGER_LIFT_OFF / NEAR_LIFT_OFF, HYDRAULIC_PRESSURE_LOSS, IMPROPER_OUTRIGGER_DEPLOYMENT, NOT_PERMITTED, WIND_ALERT, LMI_BYPASS, LMI_PREWARNING, LMI_DIVERGENCE, DEVICE_OVERLOAD, A2B_ALERT, DATA_QUALITY) and only classifies and words them.
 - Module 3 (Sujal): `craneModel.js` (`KIT`, `radiusFromAngle`, `supportPolygon`, `loadGroundPosition`); the chart and stability numbers themselves reach the panel through the detector.
 
 What the panel does before calling the detector:
 
-- A blank `lmi_pct` is passed as `NaN`. The shared `parseCSV` turns an empty cell into `0`, which the detector would read as "device LMI 0 %". Without this the 12:18–12:19 rows would raise 109 false LMI_DIVERGENCE alarms.
+- A blank `lmi_pct` is `NaN`. The shared `parseCSV` now gives `NaN` for an empty cell. (It used to give `0`, which the detector read as "device LMI 0 %" and raised 109 false LMI_DIVERGENCE alarms at 12:18–12:19. The panel still treats a `0` with a real load on the hook as blank, so it works with either version of `parseCSV`.)
 - The previous row is passed only if it is itself a valid row, so the row after a glitch (15:00:01, 17:00:01) is not blamed for the glitch.
-- In MANUAL mode the pad columns are not simulated. The detector gets an even split of 170 t + load so its pad checks stay silent, and the panel shows the pads as "not simulated".
+- In MANUAL mode the pad columns are not simulated. The detector gets an even split of (machine mass `KIT.MACHINE_MASS_T` + load) so its pad checks stay silent, and the panel shows the pads as "not simulated".
 
 ### 4. Behaviour Rules
 
@@ -429,19 +433,20 @@ What the panel does before calling the detector:
 - Alarms are latched: one entry per episode, not one per second. When the playback arrives by a jump, the first timestamp is found by looking back to the true start of the episode, so it is the same at 1×, 10×, 50×, 100× and after a jump.
 - A BAD DATA row suppresses crane alarms on that row and shows a data-problem entry instead; a STALE row (dropout, repeated timestamp) shows a STALE entry.
 - `lmi_pct` blank and chart null → "NOT PERMITTED" in red, with no made-up percentage.
-- MANUAL entries carry the tag SIMULATED.
+- MANUAL entries carry the tag SIMULATED. While MANUAL is on, the real alarms of the row you left are greyed; back in LIVE the same entries carry on (one entry each, with the true first timestamp, no second copy). The SIMULATED entries stay greyed as history.
+- The **Jump to** list comes from `buildEventIndex` (a scan of the recording by the detector), not from times typed into the page. Dropouts stop on the last row before the gap, so Play shows the NO DATA state.
 
 ### 5. Testing
 
 ```
-node Cycle-3/js/test_sensorPanelUI.mjs     # 103 checks
+node Cycle-3/js/test_sensorPanelUI.mjs     # 125 checks
 node Cycle-3/js/test_dataQuality.mjs       # 37 checks
 node Cycle-3/js/test_crane3d.mjs           # 51 checks
 ```
 
-`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads, the whole day at 3 rows per frame (21 entries), what is passed to the detector, and that nothing throws. The page itself was checked in a headless browser: no console errors, jump list, MANUAL ↔ LIVE, overload, BAD DATA, dropout, wind.
+`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads, the whole day at 3 rows per frame (23 entries), the NO DATA state during a dropout, the derived Jump list (true first timestamps), what is passed to the detector, and that nothing throws. The page itself was checked in a headless browser (26 checks, no console errors): what is visible in LIVE (playback only) and in MANUAL (sliders only), the derived Jump list, MANUAL ↔ LIVE, overload, BAD DATA, NOT PERMITTED, wind, and playing into the dropout.
 
-Whole-day alarm log (21 entries with the current `parseCSV`; 23 once blank cells parse to `NaN`, because two single-row LMI divergence entries then appear at 12:18:00 and 12:19:50, where the device is blank but the chart still gives 41.4 t): improper deployment 07:03:00 · overload 09:00:00 · overload + LMI divergence 09:50:00 · near lift-off 10:25:20 · overload 11:00:00 · hydraulic loss 11:00:01 · NOT PERMITTED 12:18:40 · wind 12:30:00 · LMI bypass 14:00:00 · pre-warning ×4 (14:09:58, 14:19:58, 14:39:58, 14:49:58) · BAD DATA ×4 (14:30:00, 15:00:00, 15:30:00, 17:00:00) · dropout 15:25:00 · repeated timestamp 15:59:49 · dropout 16:00:02.
+Whole-day alarm log (23 entries; the two single-row LMI divergence entries at 12:18:00 and 12:19:50 are where the device is blank but our chart still gives 41.4 t, see the fault list, A6. With the old `parseCSV`, which read a blank as 0, the log had 21 entries): improper deployment 07:03:00 · overload 09:00:00 · overload + LMI divergence 09:50:00 · near lift-off 10:25:20 · overload 11:00:00 · hydraulic loss 11:00:01 · NOT PERMITTED 12:18:40 · wind 12:30:00 · LMI bypass 14:00:00 · pre-warning ×4 (14:09:58, 14:19:58, 14:39:58, 14:49:58) · BAD DATA ×4 (14:30:00, 15:00:00, 15:30:00, 17:00:00) · dropout 15:25:00 · repeated timestamp 15:59:49 · dropout 16:00:02.
 
 ### 6. Real vs Faked
 
@@ -464,6 +469,8 @@ Whole-day alarm log (21 entries with the current `parseCSV`; 23 once blank cells
 
 ### 7. Known limits
 
-- The clock plays 1 row = 1 s, so the dropout and the backwards timestamps are not visible in the playback itself. Module 4 finds them from the file in file order (`scanClockFaults`) and marks STALE.
-- `parseCSV` sorts by `ts` and turns blank cells into 0. Module 4 compensates (see section 3), but the real fix is in `parseCSV`.
-- The detector gets one row at a time, so it cannot see a dropout. See the fault list, class C.
+- The NO DATA seconds are an estimate (wall time × playback rate): the clock does not publish its position inside a gap. It is for display only; the alarm log and the first timestamps never use it.
+- The detector gets one row at a time and has no time rule, so it does not report a dropout, a repeated or a backwards timestamp. Module 4 reports them (`dataQuality.js`: STALE). See the fault list, class C.
+- `parseCSV` sorts by `ts`, so the backwards step 15:59:59 → 15:59:49 is not visible in the sorted rows. Module 4 finds it from the raw file text in file order (`scanClockFaults`).
+- The 12:18:00 and 12:19:50 rows (boom 45.6 m, radius 10.00 m): the chart gives 41.4 t, the device LMI is blank. Open question for Module 3: is r = 10 m permitted for this boom?
+- In MANUAL the pads, the device LMI and the status word are not simulated.
