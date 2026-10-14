@@ -32,6 +32,39 @@ function signedAngleDelta(current, previous) {
   return Math.abs(delta);
 }
 
+function validPreviousTelemetryForRates(telemetry) {
+  if (!telemetry || !validTimestamp(telemetry.ts)) return false;
+
+  const {
+    load_t: loadT,
+    boom_length_m: boomLengthM,
+    boom_angle_deg: boomAngleDeg,
+    radius_m: radiusM,
+    slew_deg: slewDeg,
+  } = telemetry;
+
+  if (![loadT, boomLengthM, boomAngleDeg, radiusM, slewDeg].every(finite)) return false;
+  if (loadT < 0 || boomAngleDeg < 0 || boomAngleDeg > 85) return false;
+
+  const expectedRadius = radiusFromAngle(boomLengthM, boomAngleDeg, KIT.PIVOT_OFFSET_M);
+  if (Math.abs(radiusM - expectedRadius) > 1) return false;
+
+  if (finite(telemetry.hook_height_m)) {
+    const expectedHeight = boomLengthM * Math.sin(boomAngleDeg * Math.PI / 180);
+    if (Math.abs(telemetry.hook_height_m - expectedHeight) > 1) return false;
+  }
+
+  if (telemetry.outrigger_state === 'DEPLOYED') {
+    const pads = [telemetry.pad_fl_t, telemetry.pad_fr_t, telemetry.pad_rl_t, telemetry.pad_rr_t];
+    if (pads.some(value => !finite(value))) return false;
+    if (Math.abs(pads.reduce((sum, value) => sum + value, 0) - (KIT.MACHINE_MASS_T + loadT)) > PAD_SUM_TOLERANCE) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function validationErrors(telemetry, previousTelemetry) {
   const errors = [];
   const {
@@ -82,7 +115,7 @@ function validationErrors(telemetry, previousTelemetry) {
     }
   }
 
-  if (previousTelemetry && validTimestamp(previousTelemetry.ts) && validTimestamp(telemetry.ts)) {
+  if (validPreviousTelemetryForRates(previousTelemetry) && validTimestamp(telemetry.ts)) {
     const seconds = (Date.parse(telemetry.ts) - Date.parse(previousTelemetry.ts)) / 1000;
     if (seconds > 0 && seconds <= 10) {
       if (finite(previousTelemetry.boom_length_m) && finite(boomLengthM) &&

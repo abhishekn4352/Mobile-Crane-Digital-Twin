@@ -1,6 +1,11 @@
 import {
   detectFailures,
 } from './failureDetector.js';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { parseCSV } from './playbackClock.js';
 
 
 function showResult(name, telemetry) {
@@ -210,3 +215,64 @@ const liftOffResult = showResult(
 if (!liftOffResult.failures.some(failure => failure.type === 'OUTRIGGER_LIFT_OFF')) {
   throw new Error('A valid zero-reaction pad sample must retain OUTRIGGER_LIFT_OFF detection');
 }
+
+
+// ------------------------------------------------------------
+// 6. RECORDING-BASED ALARM REGRESSIONS
+// ------------------------------------------------------------
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const csvPath = join(__dirname, '../data/mobile-telemetry-2026-09-16.csv');
+const rows = parseCSV(readFileSync(csvPath, 'utf8'));
+
+assert.ok(rows.length > 0, 'The kit CSV should contain telemetry rows');
+
+const resultsByTimestamp = new Map();
+let previousRow = null;
+for (const row of rows) {
+  const result = detectFailures(row, previousRow);
+  resultsByTimestamp.set(row.ts, result);
+  previousRow = row;
+}
+
+function assertRecordingAlarms(timestamp, expectedTypes) {
+  const result = resultsByTimestamp.get(timestamp);
+  assert.ok(result, `The kit CSV should contain ${timestamp}`);
+  assert.equal(result.timestamp, timestamp);
+  for (const type of expectedTypes) {
+    const failure = result.failures.find(candidate => candidate.type === type);
+    assert.ok(failure, `${timestamp} should report ${type}`);
+    assert.equal(failure.timestamp, timestamp);
+  }
+}
+
+assertRecordingAlarms('2026-09-16T07:03:00+05:30', ['IMPROPER_OUTRIGGER_DEPLOYMENT']);
+assertRecordingAlarms('2026-09-16T09:00:00+05:30', ['OVERLOAD']);
+assertRecordingAlarms('2026-09-16T09:50:00+05:30', ['OVERLOAD', 'LMI_DIVERGENCE']);
+assertRecordingAlarms('2026-09-16T10:25:20+05:30', ['OUTRIGGER_NEAR_LIFT_OFF']);
+assertRecordingAlarms('2026-09-16T11:00:00+05:30', ['OVERLOAD']);
+assertRecordingAlarms('2026-09-16T11:00:01+05:30', ['HYDRAULIC_PRESSURE_LOSS']);
+assertRecordingAlarms('2026-09-16T12:18:40+05:30', ['NOT_PERMITTED']);
+for (const timestamp of [
+  '2026-09-16T14:30:00+05:30',
+  '2026-09-16T15:00:00+05:30',
+  '2026-09-16T15:30:00+05:30',
+  '2026-09-16T17:00:00+05:30',
+]) {
+  assertRecordingAlarms(timestamp, ['DATA_QUALITY']);
+}
+
+for (const timestamp of [
+  '2026-09-16T15:00:01+05:30',
+  '2026-09-16T17:00:01+05:30',
+]) {
+  const result = resultsByTimestamp.get(timestamp);
+  assert.ok(result, `The kit CSV should contain ${timestamp}`);
+  assert.equal(
+    result.failures.some(failure => failure.type === 'DATA_QUALITY'),
+    false,
+    `${timestamp} should not inherit a rate alarm from the preceding invalid row`
+  );
+}
+
+console.log('PASS: Recording-based failure detector alarm regressions');
