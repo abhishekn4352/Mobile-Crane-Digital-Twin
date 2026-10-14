@@ -14,6 +14,9 @@
     panel drawing ................. js/panel.js            (Module 4)
     data quality (OK/STALE/BAD) ... js/dataQuality.js      (Module 4 helper)
 
+  LIVE / MANUAL switch (dock): LIVE shows only the playback controls (play, speed, position, jump),
+  MANUAL shows only the sliders. The "Jump to" list is derived from the recording, not typed.
+
   Run from the repository root:   python -m http.server 8000
   Open:                           http://localhost:8000/Cycle-3/simulator.html
 -->
@@ -59,6 +62,7 @@ h3:first-child{margin-top:0}
 .tile.wide{grid-column:1/-1}
 [data-cls="ok"]{color:var(--text)}[data-cls="warn"]{color:var(--amber)}[data-cls="crit"]{color:var(--red-crit)}
 [data-cls="bad"]{color:var(--red-crit);text-decoration:underline wavy}[data-cls="mute"]{color:var(--muted)}
+#app[data-dropout="1"] #left .tile{opacity:.4}              /* NO DATA: the values are held from the last sample */
 .bar{height:6px;background:#15171a;border-radius:3px;overflow:hidden;margin-top:4px}
 .bar>i{display:block;height:100%;width:0;background:var(--green-ok)}
 .bar>i[data-cls="warn"]{background:var(--amber)}.bar>i[data-cls="crit"]{background:var(--red-crit)}.bar>i[data-cls="mute"]{background:#555}
@@ -86,6 +90,17 @@ select{background:var(--dark-surface);color:var(--text);border:1px solid var(--l
 .sl input[type=range]{width:100%;accent-color:var(--crane-yellow);margin:0}
 .hint{color:var(--muted);font-size:11px;margin:2px 0 6px}
 #app[data-mode="MANUAL"] #dock{box-shadow:inset 0 3px 0 var(--amber)}
+/* LIVE / MANUAL switch. LIVE shows only the playback controls, MANUAL only the sliders. Both panes sit in
+   the same grid cell, so the dock keeps one height and the 3D view does not resize when the mode changes. */
+.seg{display:inline-flex}
+.seg .btn{border-radius:0;padding:5px 16px}
+.seg .btn:first-child{border-radius:4px 0 0 4px}
+.seg .btn:last-child{border-radius:0 4px 4px 0;margin-left:-1px}
+.seg .btn.on[data-m="MANUAL"]{background:var(--amber);border-color:var(--amber)}
+#modeHint{margin:0;flex:1;min-width:200px}
+#panes{display:grid}
+#panes>div{grid-area:1/1;min-width:0}
+#app[data-mode="LIVE"] #manualPane,#app[data-mode="MANUAL"] #livePane{visibility:hidden}
 
 /* ---------- right: banner + alarms */
 #banner{border:1px solid var(--line);border-left-width:6px;border-radius:6px;padding:8px 10px;background:var(--surface-2)}
@@ -184,20 +199,34 @@ details ul{margin:6px 0 0;padding-left:16px;color:var(--muted)}
       <div id="view"><div class="note" title="The wind speed is real (CSV). The size, period and direction of the sway are illustrative only.">3D view · drag to orbit · scroll to zoom · load sway = wind (visual only)</div></div>
       <div id="dock">
         <div class="row">
-          <button class="btn" id="b_play">Play</button>
-          <span id="rates"></span>
-          <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in the recording">
-          <select id="jump" aria-label="Jump to a moment"></select>
+          <div class="seg" role="group" aria-label="Mode">
+            <button class="btn ghost on" id="m_live" data-m="LIVE" aria-pressed="true" title="Follow the recorded telemetry">LIVE</button>
+            <button class="btn ghost" id="m_manual" data-m="MANUAL" aria-pressed="false" title="Override the values with sliders">MANUAL</button>
+          </div>
+          <span class="hint" id="modeHint"></span>
         </div>
-        <div class="hint">LIVE: the sliders show the incoming telemetry. Touch a slider to switch to MANUAL (override); the badge turns amber and alarms are labelled SIMULATED.</div>
-        <div class="sliders">
-          <div class="sl"><label>Load <b data-slider-val="load">-</b></label><input type="range" data-slider="load" min="0" max="60" step="0.1" value="0"></div>
-          <div class="sl"><label>Boom length <b data-slider-val="boomLength">-</b></label><input type="range" data-slider="boomLength" min="23.35" max="53.35" step="0.1" value="32"></div>
-          <div class="sl"><label>Boom angle <b data-slider-val="boomAngle">-</b></label><input type="range" data-slider="boomAngle" min="5" max="85" step="0.1" value="65"></div>
-          <div class="sl"><label>Slew <b data-slider-val="slew">-</b></label><input type="range" data-slider="slew" min="-180" max="180" step="1" value="0"></div>
-          <div class="sl"><label>Wind <b data-slider-val="wind">-</b></label><input type="range" data-slider="wind" min="0" max="60" step="1" value="11"></div>
-          <div class="sl"><label>Outriggers</label>
-            <select data-outriggers style="width:100%"><option value="DEPLOYED">DEPLOYED</option><option value="RETRACTED">RETRACTED</option></select></div>
+        <div id="panes">
+          <div id="livePane">
+            <div class="row">
+              <button class="btn" id="b_play">Play</button>
+              <span id="rates"></span>
+              <select id="jump" aria-label="Jump to a moment"></select>
+            </div>
+            <div class="row">
+              <input id="scrub" type="range" min="0" max="1" step="1" value="0" aria-label="Position in the recording">
+            </div>
+          </div>
+          <div id="manualPane">
+            <div class="sliders">
+              <div class="sl"><label>Load <b data-slider-val="load">-</b></label><input type="range" data-slider="load" min="0" max="60" step="0.1" value="0"></div>
+              <div class="sl"><label>Boom length <b data-slider-val="boomLength">-</b></label><input type="range" data-slider="boomLength" min="23.35" max="53.35" step="0.1" value="32"></div>
+              <div class="sl"><label>Boom angle <b data-slider-val="boomAngle">-</b></label><input type="range" data-slider="boomAngle" min="5" max="85" step="0.1" value="65"></div>
+              <div class="sl"><label>Slew <b data-slider-val="slew">-</b></label><input type="range" data-slider="slew" min="-180" max="180" step="1" value="0"></div>
+              <div class="sl"><label>Wind <b data-slider-val="wind">-</b></label><input type="range" data-slider="wind" min="0" max="60" step="1" value="11"></div>
+              <div class="sl"><label>Outriggers</label>
+                <select data-outriggers style="width:100%"><option value="DEPLOYED">DEPLOYED</option><option value="RETRACTED">RETRACTED</option></select></div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -247,7 +276,7 @@ const { parseCSV, PlaybackClock, PLAYBACK_RATES } = await need('./js/playbackClo
 const { detectFailures, expectedHydraulicPressure } = await need('./js/failureDetector.js');
 const { createCrane3D, createGroundOverlay, buildOutriggerTimeline, poseFromSample } = await need('./js/crane3d.js');
 const { loadGroundPosition, supportPolygon } = await need('./js/craneModel.js');   // Module 3: the one source of kit geometry
-const { PanelSession, manualSampleFromControls, controlsFromSample, MODE } = await need('./js/panelModel.js');
+const { PanelSession, manualSampleFromControls, controlsFromSample, MODE, dropoutStatus, applyDropout, buildEventIndex } = await need('./js/panelModel.js');
 const { createSensorPanel } = await need('./js/panel.js');
 const { scanClockFaults } = await need('./js/dataQuality.js');
 if (missing.length) {
@@ -311,7 +340,7 @@ function loop(n) {
   C.lookAt(tg);
   crane.tick(n / 1000);                 // wind sway animation: screen time only, never used as telemetry time
   R.render(S, C);
-  if (clock) syncControls();
+  if (clock) { syncControls(); watchDropout(n); }
 }
 requestAnimationFrame(loop);
 
@@ -327,9 +356,27 @@ function present(vm, sample, mode) {
   const g = loadGroundPosition(sample.radius_m, sample.slew_deg);
   if (Number.isFinite(g.x) && Number.isFinite(g.z)) overlay.setLoadPoint(g.x, g.z);
   overlay.setPolygonColor(vm.stability.cls === 'crit' ? 0xe5584f : 0xf4b400);
+  syncControls();
+}
+
+// The clock is ts-driven: inside a gap in the recording it publishes nothing for a while. Estimate the
+// simulated seconds since the last row (wall time x rate, same 200 ms frame cap as the clock) so the panel
+// can say NO DATA instead of looking frozen. Display only.
+let simElapsedS = 0, lastFrameMs = null, lastDropoutDraw = 0;
+function watchDropout(nowMs) {
+  const dt = lastFrameMs === null ? 0 : Math.min(nowMs - lastFrameMs, 200) / 1000;
+  lastFrameMs = nowMs;
+  if (clock.mode !== MODE.LIVE || !clock.playing) return;
+  simElapsedS += dt * clock.rate;
+  const d = dropoutStatus(rows, clock.currentIndex, simElapsedS);
+  if (d && nowMs - lastDropoutDraw > 250) {
+    lastDropoutDraw = nowMs;
+    panel.render(applyDropout(session.current(MODE.LIVE), d));
+  }
 }
 
 function onClock(sample, clk) {
+  simElapsedS = 0;                                      // a new row was published
   const vm = clk.mode === MODE.MANUAL
     ? session.manualUpdate(sample)
     : session.liveUpdate(clk.currentIndex, clk.playing);
@@ -345,6 +392,12 @@ function manualInput(controls) {
   clock.pushManualSample(manualSampleFromControls(baseSample, controls, { expectedPressure: expectedHydraulicPressure }));
 }
 
+/** The MANUAL button: take over from the telemetry row on screen (the sliders mirror it in LIVE). */
+function enterManual() {
+  if (clock.mode === MODE.MANUAL) return;
+  manualInput(panel.readSliders());
+}
+
 function returnToLive() {
   clock.setLive();                                      // resumes playback from the current position
   const i = clock.currentIndex;
@@ -357,7 +410,18 @@ function jumpToTs(ts) {
   clock.jumpTo(ts);
 }
 
+const HINT = {
+  LIVE: 'Following the recorded telemetry (the CSV\u2019s own timestamps). Switch to MANUAL to override the values with sliders.',
+  MANUAL: 'Recording paused. You control the crane; alarms are labelled SIMULATED. Switch to LIVE to carry on from where you left.',
+};
 function syncControls() {
+  if (!clock) return;
+  const manual = clock.mode === MODE.MANUAL;
+  for (const [id, on] of [['m_live', !manual], ['m_manual', manual]]) {
+    const b = $(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  const h = $('modeHint'), want = HINT[manual ? 'MANUAL' : 'LIVE'];
+  if (h.textContent !== want) h.textContent = want;
   $('b_play').textContent = clock.playing ? 'Pause' : 'Play';
   if (!scrubbing && clock.mode === MODE.LIVE) $('scrub').value = clock.currentIndex;
   document.querySelectorAll('#rates button').forEach((b) => b.classList.toggle('on', +b.dataset.rate === clock.rate));
@@ -404,38 +468,38 @@ async function start() {
   scrub.onpointerup = () => { scrubbing = false; };
   scrub.oninput = () => jumpToTs(rows[+scrub.value].ts);
 
+  $('m_live').onclick = () => { if (clock.mode === MODE.MANUAL) returnToLive(); };
+  $('m_manual').onclick = enterManual;
+
   const jump = $('jump');
-  const group = (label) => { const g = document.createElement('optgroup'); g.label = label; jump.appendChild(g); return g; };
-  const add = (g, hmsText, why) => {
-    const x = rows.find((q) => q.ts.includes('T' + hmsText));
-    if (!x) return;
-    const o = document.createElement('option'); o.value = x.ts; o.textContent = hmsText + '  ' + why; g.appendChild(o);
-  };
-  jump.appendChild(new Option('Jump to…', ''));
-  let g = group('Real failures');
-  add(g, '07:03:00', 'hoist while outriggers still DEPLOYING');
-  add(g, '09:00:00', 'overload 109 %');
-  add(g, '09:50:00', 'overload; device LMI says 78 %');
-  add(g, '10:25:27', 'pad FL almost off the ground');
-  add(g, '11:02:00', 'overload 132 % + hydraulic pressure loss');
-  add(g, '12:18:40', 'load on a combination the chart does not permit');
-  g = group('Device conditions');
-  add(g, '12:30:10', 'wind alert 45 km/h (load sways)');
-  add(g, '14:00:10', 'LMI bypass key active');
-  add(g, '14:10:00', 'LMI pre-warning 90 %+');
-  g = group('Impossible rows (BAD DATA)');
-  add(g, '14:30:00', 'radius 40 m, boom says 14 m');
-  add(g, '15:00:00', 'boom 70 m');
-  add(g, '15:30:00', 'load -3 t, pads 0');
-  add(g, '17:00:00', 'boom angle 95°');
-  g = group('Missing / repeated data (STALE)');
-  add(g, '15:25:00', 'after the 15:20–15:25 dropout');
-  add(g, '16:00:02', 'after the clock jump');
+  jump.appendChild(new Option('Jump to… (scanning the recording)', ''));
+  jump.disabled = true;
+  const GROUPS = [['critical', 'Failures'], ['warning', 'Warnings and device conditions'], ['data', 'Data problems']];
+  function fillJump() {
+    const events = buildEventIndex(rows, { detect: detectFailures, expectedPressure: expectedHydraulicPressure });
+    jump.textContent = '';
+    jump.appendChild(new Option(`Jump to… (${events.length} events found in this recording)`, ''));
+    for (const [sev, label] of GROUPS) {
+      const g = document.createElement('optgroup'); g.label = label;
+      for (const e of events.filter((x) => x.severity === sev)) {
+        const i = e.index;
+        // dropout / repeated timestamp are only visible when the clock ARRIVES at that row: stop on the row
+        // before it and press Play to watch it happen
+        const before = (e.type === 'DROPOUT' || e.type === 'REPEATED_TIMESTAMP') && i > 0;
+        const at = before ? rows[i - 1].ts : rows[i].ts;
+        g.appendChild(new Option(`${hms(at)}  ${e.type.replace(/_/g, ' ')}${before ? ' (press Play)' : ''}`, at));
+      }
+      if (g.children.length) jump.appendChild(g);
+    }
+    jump.disabled = false;
+    window.__twin.events = events;
+  }
   jump.onchange = () => { if (jump.value) jumpToTs(jump.value); jump.selectedIndex = 0; };
 
-  window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, session, panel, manualInput, returnToLive, jumpToTs, faults,
+  window.__twin = { THREE: T, scene: S, renderer: R, clock, rows, timeline, crane, overlay, session, panel, manualInput, enterManual, returnToLive, jumpToTs, faults,
     cam: { target: tg, set(dist, theta, phi) { rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
   onClock(clock.currentTelemetrySample, clock);
+  setTimeout(fillJump, 0);                              // after the first paint (the scan takes a fraction of a second)
 }
 start();
 </script>

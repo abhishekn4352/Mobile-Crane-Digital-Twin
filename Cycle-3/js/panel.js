@@ -131,6 +131,7 @@ export function createSensorPanel(root, handlers = {}) {
     set('mode', vm.mode);
     const manual = vm.mode.key === 'MANUAL';
     root.dataset.mode = vm.mode.key;
+    root.dataset.dropout = vm.dropout ? '1' : '0';          // NO DATA: the sensor values are greyed (held)
     if (returnBtn) returnBtn.hidden = !manual;
     set('quality', { text: vm.quality.level === 'OK' ? 'DATA OK' : vm.quality.text, cls: vm.quality.cls });
     setText('qualityDetail', vm.quality.detail);

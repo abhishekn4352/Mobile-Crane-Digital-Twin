@@ -15,7 +15,7 @@ import { parseCSV } from './playbackClock.js';
 import { detectFailures, expectedHydraulicPressure } from './failureDetector.js';
 import {
   MODE, AlarmLog, PanelSession, analyseSample, buildPanelModel,
-  manualSampleFromControls, controlsFromSample, hasBit, STATUS_BIT, deviceLmiPct,
+  manualSampleFromControls, controlsFromSample, hasBit, STATUS_BIT, deviceLmiPct, dropoutStatus, applyDropout, buildEventIndex,
 } from './panelModel.js';
 
 let passed = 0, failed = 0;
@@ -76,6 +76,10 @@ console.log('\n=== MODE BADGE: LIVE (telemetry) / MANUAL (override) ===');
   check('back to LIVE: the simulated alarm is cleared (greyed), not active', find(back, 'OVERLOAD') && back.alarms.filter((a) => a.type === 'OVERLOAD').every((a) => a.simulated ? !a.active : true));
   const liveOv = back.alarms.find((a) => a.type === 'OVERLOAD' && !a.simulated);
   check('back to LIVE: the real overload is active again with its true first timestamp 09:00:00', liveOv && liveOv.active && liveOv.first === '09:00:00', JSON.stringify(liveOv));
+  check('back to LIVE: ONE real overload entry (the one MANUAL greyed carries on, no second copy)', back.alarms.filter((a) => a.type === 'OVERLOAD' && !a.simulated).length === 1, back.alarms.filter((a) => a.type === 'OVERLOAD').map((a) => `${a.simulated ? 'sim' : 'real'}:${a.active ? 'on' : 'off'}`).join());
+  check('...and the simulated one stays as a greyed SIMULATED entry', back.alarms.filter((a) => a.type === 'OVERLOAD' && a.simulated && !a.active).length === 1);
+  const next = s.liveUpdate(idx('09:00:00') + 1, true);
+  check('playing on after MANUAL: still one real overload, still first at 09:00:00', next.alarms.filter((a) => a.type === 'OVERLOAD' && !a.simulated).length === 1 && next.alarms.find((a) => a.type === 'OVERLOAD' && !a.simulated).first === '09:00:00');
   const s3 = fresh();
   s3.liveUpdate(idx('09:00:10'));
   s3.manualUpdate(manualSampleFromControls(base, { ...controlsFromSample(base), loadT: 90 }, deps));
@@ -301,6 +305,49 @@ console.log('\n=== DETECTOR INTEGRATION (what the panel hands to detectFailures)
   const man = analyseSample(ms, null, deps, { manual: true });
   check('MANUAL, outriggers DEPLOYED, 90 t: the detector is not blocked by missing pads (OVERLOAD is raised)',
     man.raised.some((r) => r.type === 'OVERLOAD') && man.quality.level === 'OK', JSON.stringify(man.raised.map((r) => r.type)));
+}
+
+
+console.log('\n=== DROPOUT IN PROGRESS (the ts-driven clock waits inside a gap) ===');
+{
+  const i = idx('15:19:59');
+  check('the row after 15:19:59 is 15:25:00', rows[i + 1].ts.includes('T15:25:00'));
+  check('1 s after the row: no dropout yet', dropoutStatus(rows, i, 1) === null);
+  check('normal playback (1 s between rows): never a dropout', dropoutStatus(rows, idx('10:00:00'), 50) === null);
+  const d = dropoutStatus(rows, i, 120);
+  check('120 s into the gap: dropout, 301 s gap, 300 s missing', d && d.gapS === 301 && d.missingS === 300 && d.elapsedS === 120, JSON.stringify(d));
+  check('elapsed never exceeds the gap', dropoutStatus(rows, i, 9999).elapsedS === 301);
+  check('NaN elapsed, or the last row: null', dropoutStatus(rows, i, NaN) === null && dropoutStatus(rows, rows.length - 1, 50) === null);
+  const base = fresh().liveUpdate(i);
+  const vm = applyDropout(base, d);
+  check('NO DATA banner and an amber STALE badge', /NO DATA/.test(vm.banner.label) && vm.quality.level === 'STALE' && vm.quality.cls === 'warn', JSON.stringify(vm.banner));
+  check('it says since when and how long', /15:19:59/.test(vm.banner.reason) && /120 s of 301 s/.test(vm.quality.detail), vm.quality.detail);
+  check('the original view-model is not changed', base.dropout === undefined && !/NO DATA/.test(base.banner.label));
+  check('no dropout: the same view-model comes back', applyDropout(base, null) === base);
+  const j = idx('15:59:59');
+  const d2 = dropoutStatus(rows, j, 2.5);
+  check('the 3 s gap 15:59:59 -> 16:00:02 is a dropout too (2 s missing) once 2.5 s have passed', d2 && d2.missingS === 2, JSON.stringify(d2));
+}
+
+
+console.log('\n=== EVENT INDEX (the derived "Jump to" list) ===');
+{
+  const ev = buildEventIndex(rows, deps);
+  const first = (type) => ev.filter((e) => e.type === type).map((e) => e.firstTs.slice(11, 19));
+  check('the scan finds the whole-day alarm log (23 entries with a fixed parser, 21 with the old one)', ev.length === 23 || ev.length === 21, String(ev.length));
+  check('true first timestamps: overload 09:00:00, 09:50:00, 11:00:00', first('OVERLOAD').join() === '09:00:00,09:50:00,11:00:00', first('OVERLOAD').join());
+  check('true first timestamps: hydraulic 11:00:01, wind 12:30:00, bypass 14:00:00, near lift-off 10:25:20',
+    first('HYDRAULIC_PRESSURE_LOSS').join() === '11:00:01' && first('WIND_ALERT').join() === '12:30:00' && first('LMI_BYPASS').join() === '14:00:00' && first('OUTRIGGER_NEAR_LIFT_OFF').join() === '10:25:20');
+  check('bad data rows: 14:30:00, 15:00:00, 15:30:00, 17:00:00', first('BAD_DATA').join() === '14:30:00,15:00:00,15:30:00,17:00:00', first('BAD_DATA').join());
+  check('time order', ev.every((e, i) => i === 0 || ev[i - 1].firstTs <= e.firstTs));
+  check('index points at the row the episode started on', ev.every((e) => rows[e.index].ts === e.firstTs));
+  const rep = ev.find((e) => e.type === 'REPEATED_TIMESTAMP');
+  check('repeated timestamp: index is the SECOND row with that ts (jump one row before it)', rep && rows[rep.index - 1].ts === rep.firstTs, JSON.stringify(rep));
+  check('same entries as the playback shows (whole day, 1 row at a time)', (() => {
+    const s = fresh(); let vm;
+    for (let i = 0; i < rows.length; i++) vm = s.liveUpdate(i, i > 0);
+    return vm.alarms.length === ev.length;
+  })(), 'compare with the log');
 }
 
 

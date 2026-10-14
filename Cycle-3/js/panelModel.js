@@ -26,7 +26,7 @@
 // ============================================================
 
 import { KIT } from './craneModel.js';            // Module 3: kit constants live there only
-import { QUALITY, assessSample, staticIssues } from './dataQuality.js';
+import { QUALITY, LIMITS, assessSample, staticIssues } from './dataQuality.js';
 import { expectedRadiusM, expectedHookHeightM } from './dataQuality.js';
 
 export const MODE = Object.freeze({ LIVE: 'LIVE', MANUAL: 'MANUAL' });
@@ -217,10 +217,11 @@ export class AlarmLog {
     this.max = maxEntries;
     this.entries = [];
     this._open = new Map();
+    this._paused = new Map();   // real alarms that a MANUAL sample closed (they carry on when LIVE comes back)
     this._seq = 0;
   }
 
-  reset() { this.entries = []; this._open.clear(); }
+  reset() { this.entries = []; this._open.clear(); this._paused.clear(); }
 
   /**
    * Feed ONE analysed row, in recording order.
@@ -237,6 +238,15 @@ export class AlarmLog {
       now.add(key);
       const open = this._open.get(key);
       if (open) { open.lastTs = analysis.ts; open.rows += 1; continue; }
+      const paused = !simulated ? this._paused.get(key) : null;
+      if (paused) {
+        // back from MANUAL: the real alarm that was greyed while the sliders were in control carries on
+        // (same entry, same true first timestamp), instead of a second copy of it
+        this._paused.delete(key);
+        paused.active = true; paused.clearedTs = null; paused.lastTs = analysis.ts; paused.rows += 1;
+        this._open.set(key, paused);
+        continue;
+      }
       const o = opts.onset ? opts.onset(r) : null;          // { ts, raised } of the first row of the run
       const first = o ? o.raised : r;
       const e = {
@@ -252,10 +262,15 @@ export class AlarmLog {
       e.active = false;
       e.clearedTs = analysis.ts;
       this._open.delete(key);
+      if (simulated && !e.simulated) this._paused.set(key, e);
     }
+    if (!simulated) this._paused.clear();                 // only the first LIVE row after MANUAL may revive them
     if (this.entries.length > this.max) {
       const drop = this.entries.findIndex((e) => !e.active);
-      if (drop >= 0) this.entries.splice(drop, 1);
+      if (drop >= 0) {
+        const [gone] = this.entries.splice(drop, 1);
+        if (this._paused.get(gone.key) === gone) this._paused.delete(gone.key);
+      }
     }
   }
 
@@ -492,6 +507,43 @@ export function buildPanelModel(analysis, log, mode) {
 
 
 // ------------------------------------------------------------
+// 4b. Dropout in progress (the clock is ts-driven)
+// ------------------------------------------------------------
+
+/**
+ * The ts-driven clock waits on the last good row while it crosses a stretch with no rows
+ * (the 15:20:00-15:24:59 dropout). Without a signal the page would look frozen. This says
+ * whether the clock is inside such a stretch.
+ *
+ * @param rows         parsed recording (sorted by ts)
+ * @param index        the row the clock is showing
+ * @param simElapsedS  simulated seconds since that row was published. The clock does not expose
+ *                     this, so the page estimates it (wall time x playback rate): display only.
+ * @returns null, or { lastTs, nextTs, gapS, missingS, elapsedS }
+ */
+export function dropoutStatus(rows, index, simElapsedS) {
+  const cur = rows && rows[index];
+  const nxt = rows && rows[index + 1];
+  if (!cur || !nxt || !fin(simElapsedS)) return null;
+  const gapS = (Date.parse(nxt.ts) - Date.parse(cur.ts)) / 1000;
+  if (!(gapS > LIMITS.gapS) || !(simElapsedS > LIMITS.gapS)) return null;
+  return { lastTs: cur.ts, nextTs: nxt.ts, gapS, missingS: gapS - 1, elapsedS: Math.min(simElapsedS, gapS) };
+}
+
+/** A copy of the view-model that says NO DATA (the values on it are the last ones received). */
+export function applyDropout(vm, d) {
+  if (!vm || !d) return vm;
+  const detail = `no data since ${hms(d.lastTs)}: ${Math.floor(d.elapsedS)} s of ${Math.round(d.gapS)} s until the next sample at ${hms(d.nextTs)}`;
+  return {
+    ...vm,
+    dropout: d,
+    quality: { ...vm.quality, level: QUALITY.STALE, cls: cls.warn, text: QUALITY.STALE, detail },
+    banner: { cls: cls.warn, label: 'NO DATA · dropout in progress', reason: `${detail}. Values shown are the last ones received (${hms(d.lastTs)}).` },
+  };
+}
+
+
+// ------------------------------------------------------------
 // 5. Session: feeds the log from the playback and builds the view-model
 // ------------------------------------------------------------
 
@@ -580,4 +632,36 @@ export class PanelSession {
   current(mode = this.mode) {
     return buildPanelModel(this.lastAnalysis, this.log, mode);
   }
+}
+
+
+// ------------------------------------------------------------
+// 6. Event index of a RECORDING (for the "Jump to" list)
+// ------------------------------------------------------------
+
+/**
+ * Pre-scan of a RECORDED day: every row goes through the same analysis and the same alarm log that the
+ * playback uses, and the alarm episodes come back with their first timestamps.
+ *
+ * Why it exists: the "Jump to" list used to be typed into the page (times chosen by hand). A typed list
+ * knows the future, only fits one CSV and can disagree with the detector. This list is derived: nothing
+ * in it is written by hand, and it is exactly what the alarm log shows when the whole day is played.
+ *
+ * What it is NOT: a detector. It cannot be used on a live feed, where the future is unknown; there the
+ * alarm log simply fills as rows arrive. It only helps to navigate a recording.
+ *
+ * @returns [{ type, kind, severity, firstTs, lastTs, index, rows, value, rule }] in time order
+ *          (`index` = position in `rows` of the first row of the episode; with repeated timestamps it can
+ *          differ from the first row that has that ts)
+ */
+export function buildEventIndex(rows, deps) {
+  const log = new AlarmLog(Number.MAX_SAFE_INTEGER);
+  for (let i = 0; i < rows.length; i++) {
+    const n = log.entries.length;
+    log.ingest(analyseSample(rows[i], i > 0 ? rows[i - 1] : null, deps));
+    for (let k = n; k < log.entries.length; k++) log.entries[k].index = i;     // the row on which the episode was first seen
+  }
+  return log.entries
+    .map((e) => ({ type: e.type, kind: e.kind, severity: e.severity, firstTs: e.firstTs, lastTs: e.lastTs, index: e.index, rows: e.rows, value: e.value, rule: e.rule }))
+    .sort((a, b) => (a.firstTs < b.firstTs ? -1 : a.firstTs > b.firstTs ? 1 : 0));
 }
