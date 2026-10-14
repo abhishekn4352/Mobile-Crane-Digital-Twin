@@ -622,4 +622,21 @@ node test_stability.mjs
 
 ---
 
+## Cycle 3 — how to run
+
+# From the repository root:
+
+    python -m http.server 8000
+
+Open http://localhost:8000/Cycle-3/simulator.html
+
+Tests (Node):
+
+    node Cycle-3/js/test_playbackClock.mjs
+    node Cycle-3/js/test_failureDetector.mjs
+    node Cycle-3/js/test_craneModel.mjs
+    node Cycle-3/js/test_dataQuality.mjs
+    node Cycle-3/js/test_crane3d.mjs
+    node Cycle-3/js/test_sensorPanelUI.mjs
+
 **Built with:** HTML5 · CSS3 · JavaScript · Three.js · GLTF/GLB · Engineering calculation modules
