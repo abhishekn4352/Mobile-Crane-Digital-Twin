@@ -58,129 +58,189 @@ The Playback & Clock module serves as the central data provider (Telemetry Pipel
 
 ### Module Responsibility
 
-The Failure Detector monitors the crane telemetry data and identifies
-abnormal operating conditions during playback.
-
-The detector will check the failure modes specified for Cycle 3:
-
-- Overload against the crane load chart
-- Outrigger lift-off / loss of stability
-- Hydraulic pressure loss
-- Improper outrigger deployment
-
-Each alarm will report:
-
-- The type of failure
-- The telemetry value that triggered it
-- The rule or threshold that was violated
-- The timestamp at which the failure occurred
+The Failure Detector monitors crane telemetry during playback and
+identifies abnormal operating conditions. It reports the failure type,
+triggering telemetry or calculated value, violated rule/limit, and the
+timestamp of the triggering row.
 
 ## 2. Telemetry Inputs
 
-The Failure Detector will use the telemetry values supplied by the
-Cycle 3 recording:
-
-- Load
-- Boom length
-- Boom angle
-- Working radius
-- Outrigger state
-- Hydraulic pressure
-
-The detector will use the existing tested chart and stability modules
-where required instead of creating duplicate calculations.
+The detector uses the Cycle 3 recording's load, boom length, boom angle,
+working radius, slew angle, hook height, outrigger state, four pad
+reactions, hydraulic pressure, wind speed, device LMI percentage, and
+status word. It uses `craneModel.js` for shared chart, kit, and stability
+calculations rather than duplicating those calculations.
 
 ## 3. Detection Rules
 
-### Overload
+### Load, LMI, and stability
 
-Compare the current crane load with the rated capacity obtained from
-the existing load-chart module.
+- The current load is compared with the rated capacity from the shared
+  load chart. A permitted chart capacity that is exceeded produces
+  `OVERLOAD`. Valid chart inputs with no permitted capacity produce
+  `NOT_PERMITTED` instead. Capacity lookup and interpolation are
+  kit-derived Module 3 calculations.
+- `LMI_DIVERGENCE` is produced when computed utilization differs from
+  device `lmi_pct` by more than 2 percentage points, or exactly one of
+  those inputs is present. The 2-point tolerance is a detector rule.
+- Stability is calculated by the shared kit model using load, radius,
+  slew angle, centre of gravity, load position, and the outrigger support
+  polygon. A deployed row with a `tipping` verdict produces
+  `STABILITY_LOSS`.
+- A deployed pad reaction below 5 t produces
+  `OUTRIGGER_NEAR_LIFT_OFF`; a non-positive reaction produces
+  `OUTRIGGER_LIFT_OFF`. These thresholds are kit/model thresholds.
 
-**Rule:** To be implemented and validated against the Cycle 3 telemetry.
+### Hydraulic and deployment rules
 
-### Stability / Outrigger Lift-off
+- Expected pressure is calculated as
+  `20 + 0.35 * load_t * radius_m + 0.5 * boom_length_m`. Recorded
+  pressure below 95% of that expected value produces
+  `HYDRAULIC_PRESSURE_LOSS`. The formula is the implemented software
+  model; 95% is the detector threshold.
+- If any motion status bit 0-3 is active, or the load is positive, while
+  `outrigger_state` is not `DEPLOYED`, the detector produces
+  `IMPROPER_OUTRIGGER_DEPLOYMENT`. A parked retracted crane with no
+  motion and no load is not reported as improper deployment.
+- `WIND_ALERT` is produced above 36 km/h. This is the implemented team
+  operating threshold.
 
-Use the existing stability calculation to determine whether the crane
-remains within its supported/stable region.
+### Status bits and data quality
 
-**Rule:** To be implemented and validated against the Cycle 3 telemetry.
-
-### Hydraulic Pressure Loss
-
-Monitor hydraulic pressure from the telemetry stream and identify
-pressure loss according to the defined operating threshold.
-
-**Rule:** To be implemented and validated against the Cycle 3 telemetry.
-
-### Improper Outrigger Deployment
-
-Check the telemetry outrigger state and identify conditions where the
-required outrigger deployment is not present.
-
-**Rule:** To be implemented and validated against the Cycle 3 telemetry.
+- Status word bit 7 produces `DEVICE_OVERLOAD` when set and no calculated
+  `OVERLOAD` is already present.
+- Status word bit 8, or computed utilization from 90% up to but below
+  100%, produces `LMI_PREWARNING`.
+- Status word bit 9 produces `A2B_ALERT`; bit 12 produces `LMI_BYPASS`.
+- `DATA_QUALITY` is produced for invalid required numeric values, negative
+  load, boom angle outside 0-85 degrees, radius or hook-height geometry
+  inconsistency, excessive rates, or invalid/unbalanced deployed pads.
+  The implemented rate limits are 0.3 m/s telescope, 2 degrees/s luff,
+  and 3 degrees/s slew. Geometry tolerance is 1 m; deployed pad balance
+  must match the 170 t kit plus load within 3 t.
 
 ## 4. Alarm Output
 
-When a failure is detected, the detector will provide information that
-can be displayed by the Sensor and Alarm UI.
+`detectFailures` returns alarm objects with:
 
-The alarm information will include:
+- `type`: the failure classification, such as `OVERLOAD` or
+  `DATA_QUALITY`
+- `timestamp`: the telemetry timestamp of the row that triggered it
+- `triggerValue`: the recorded or calculated value that caused the alarm
+- `limit`: the comparison limit, expected value, or required condition
+- `rule`: a human-readable explanation of the detector rule
 
-- Failure type
-- Triggering value
-- Detection rule
-- Telemetry timestamp
+The detector reports the timestamp of the row that triggers an alarm. It
+does not independently remember the entire recording or latch an episode.
+The first timestamp for a continuing alarm episode is therefore
+determined by the alarm log's aggregation/latching behavior.
 
 ## 5. Testing
 
-A dedicated test file will be maintained:
+The following tests have been run:
 
-`js/test_failureDetector.mjs`
-
-Tests will cover normal conditions and each supported failure mode.
-
-Test results will be added here after implementation.
+- `node Cycle-3/js/test_failureDetector.mjs`
+  - Recording-based failure detector alarm regressions pass, including
+    the requested first alarm timestamps/types and recovery-row checks.
+  - The test prints `PASS: Recording-based failure detector alarm regressions`;
+    no assertion count is claimed.
+- `node Cycle-3/js/test_telemetry.mjs`
+  - Input validation and telemetry acceptance checks pass.
+- `node Cycle-3/js/test_craneModel.mjs`
+  - **83 passed, 0 failed**.
+- `node Cycle-3/js/test_playback_failure_integration.mjs`
+  - Playback sample delivery, overload, pressure-loss, stability
+    suppression, parked-crane, and invalid-row checks pass.
+- `node Cycle-3/js/test_playbackClock.mjs`
+  - **63 passed, 0 failed**.
 
 ## 6. Real vs Faked
 
-| Feature | Source | Status |
+| Feature | Source | Status/Notes |
 |---|---|---|
-| Load | Cycle 3 telemetry | To be validated |
-| Boom length | Cycle 3 telemetry | To be validated |
-| Boom angle | Cycle 3 telemetry | To be validated |
-| Working radius | Telemetry / calculation | To be validated |
-| Outrigger state | Cycle 3 telemetry | To be validated |
-| Hydraulic pressure | Cycle 3 telemetry | To be validated |
-| Rated capacity | Existing load-chart module | To be validated |
-| Stability result | Existing stability module | To be validated |
-| Overload alarm | Failure Detector | To be implemented |
-| Stability alarm | Failure Detector | To be implemented |
-| Hydraulic pressure alarm | Failure Detector | To be implemented |
-| Outrigger deployment alarm | Failure Detector | To be implemented |
+| Load, boom length, boom angle | Cycle 3 telemetry CSV | Recorded telemetry |
+| Radius, outrigger state, pad reactions | Cycle 3 telemetry CSV | Recorded telemetry |
+| Hydraulic pressure, wind, device LMI | Cycle 3 telemetry CSV | Recorded telemetry |
+| Status bits | Cycle 3 telemetry CSV | Recorded telemetry |
+| Rated capacity | `craneModel.js` | Calculated/looked up by software |
+| Computed utilization | `craneModel.js` | Calculated by software |
+| Expected hydraulic pressure | `failureDetector.js` | Calculated by software |
+| Geometry validation | Failure Detector/shared radius model | Calculated validation result |
+| Stability result | `craneModel.js` shared kit model | Calculated by software |
+| Alarm classifications | `failureDetector.js` | Calculated from recorded and derived values |
+| Visual/simulated behavior | Other modules/UI | No additional simulated telemetry is claimed by Module 2 |
 
 ## 7. Faults Found in Telemetry Recording
 
-This section will be completed after running the Failure Detector
-against the supplied Cycle 3 telemetry recording.
+The following real crane-related faults are identified when the detector
+is run against the supplied recording:
 
 | Timestamp | Fault | Detection Rule | Result |
 |---|---|---|---|
-| To be determined | To be determined | To be determined | To be determined |
+| 07:03:00 | Improper outrigger deployment | Motion bit active and load carried while outriggers are `DEPLOYING` | `IMPROPER_OUTRIGGER_DEPLOYMENT` |
+| 09:00:00 | Overload | Load exceeds rated chart capacity | `OVERLOAD` |
+| 09:50:00 | Overload with LMI under-reading | Load remains over capacity and device LMI diverges from computed utilization | `OVERLOAD` and `LMI_DIVERGENCE` |
+| 10:25:20 | Front-left pad near lift-off | FL pad reaction is below 5 t | `OUTRIGGER_NEAR_LIFT_OFF` |
+| 11:00:00 | Severe overload | Load exceeds rated chart capacity | `OVERLOAD` |
+| 11:00:01 | Hydraulic pressure loss | Pressure is below 95% of expected pressure | `HYDRAULIC_PRESSURE_LOSS` |
+| 12:18:40 | Load on a not-permitted chart combination | Valid chart inputs return no permitted capacity | `NOT_PERMITTED` |
 
-## 8. Missed Faults
+Device-reported conditions:
 
-Any faults that are present in the recording but not detected by the
-Failure Detector will be documented here after validation.
+| Timestamp | Condition | Detection Rule | Result |
+|---|---|---|---|
+| 12:30:00 | Wind alert | Wind exceeds 36 km/h | `WIND_ALERT` |
+| 14:00:00 | LMI bypass | Status word bit 12 is set | `LMI_BYPASS` |
+| 14:09:58 | LMI pre-warning episode | Computed utilization/status pre-warning condition | `LMI_PREWARNING` |
+| 14:19:58 | LMI pre-warning episode | Computed utilization/status pre-warning condition | `LMI_PREWARNING` |
+| 14:39:58 | LMI pre-warning episode | Computed utilization/status pre-warning condition | `LMI_PREWARNING` |
+| 14:49:58 | LMI pre-warning episode | Computed utilization/status pre-warning condition | `LMI_PREWARNING` |
+
+These four rows are impossible or invalid telemetry, not confirmed crane
+failures:
+
+| Timestamp | Invalid condition | Rule/outcome |
+|---|---|---|
+| 14:30:00 | Radius inconsistent with boom geometry | `DATA_QUALITY`; normal failure classification stops |
+| 15:00:00 | Impossible boom-length change and inconsistent geometry | `DATA_QUALITY`; normal failure classification stops |
+| 15:30:00 | Negative load and invalid deployed pad balance | `DATA_QUALITY`; normal failure classification stops |
+| 17:00:00 | Invalid angle and inconsistent geometry | `DATA_QUALITY`; normal failure classification stops |
+
+## 8. Missed Faults and Limitations
+
+Module 2 does not independently detect timestamp or data-stream
+continuity faults:
+
+- The telemetry gap from 15:20:00 through 15:24:59; the next row is
+  15:25:00.
+- Repeated or backwards timestamps around 15:59:49.
+- The subsequent timestamp jump to 16:00:02.
+
+These are timestamp/data-stream issues, not confirmed crane failures. No
+timestamp or dropout rule has been implemented.
+
+Rate checks compare a current row with the previous row only when that
+previous row has valid physical geometry, angle, load, and deployed-pad
+balance. This prevents a valid current row from inheriting a false
+rate-based `DATA_QUALITY` alarm from an invalid preceding row. Tests
+check recovery rows at 15:00:01 and 17:00:01.
+
+The supplied CSV contains no A2B status-bit rows, so `A2B_ALERT` is not
+validated against a recorded A2B episode. Status word bit 7 is present
+in the recording and the detector has a `DEVICE_OVERLOAD` path, but the
+supplied regression assertions do not separately validate an isolated
+device-overload alarm when no calculated overload is present.
 
 ## 9. Module Integration
 
-The Failure Detector is designed as a separate module so that it can
-receive telemetry data during playback and provide failure/alarm
-information to the Sensor and Alarm UI.
+The Failure Detector receives rows from the Module 1 playback path and
+returns failure/alarm information for the Sensor and Alarm UI. The
+playback failure integration test demonstrates that this connection is
+implemented and passes.
 
-The final integration will be performed with the Cycle 3 simulator
-after the individual modules have been developed and tested.
+The detector imports `craneModel.js` for the shared load-chart, kit, and
+stability calculations, keeping Module 3 as the calculation source of
+truth rather than duplicating those rules in Module 2.
 
 ---
 ## Module 3 — Stability & Load Chart Module + Tests
