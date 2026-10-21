@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 
 import {
   KIT,
+  OUTRIGGER_STATES,
   CHART,
   ratedCapacity,
   radiusFromAngle,
@@ -97,6 +98,7 @@ check('L 38 / r 40 -> null (outside chart)', ratedCapacity(CHART, 38, 40), null)
 const f1 = capacityFor({ boom_length_m: 38, radius_m: 12, load_t: 52 });
 check('F1 capacity', f1.capacityT, 47.5);
 check('F1 capacityInputsValid', f1.capacityInputsValid, true);
+check('F1 FULL capacity data available', f1.capacityDataAvailable, true);
 approx('F1 utilisation 52/47.5 = 109.47 %', f1.utilization * 100, 109.47, 0.01);
 
 const f5 = capacityFor({ boom_length_m: 52.4, radius_m: 8, load_t: 4 });
@@ -110,6 +112,13 @@ check('NaN boom -> inputs invalid', bad.capacityInputsValid, false);
 check('NaN boom -> utilisation null', bad.utilization, null);
 
 check('capacityFor(null) -> inputs invalid', capacityFor(null).capacityInputsValid, false);
+
+const halfCapacity = capacityFor({
+  boom_length_m: 38, radius_m: 12, load_t: 10, outrigger_state: OUTRIGGER_STATES.HALF,
+});
+check('HALF capacity is unavailable without a HALF chart column', halfCapacity.capacityT, null);
+check('HALF capacity data is explicitly unavailable', halfCapacity.capacityDataAvailable, false);
+check('HALF capacity does not fall back to FULL', halfCapacity.capacityT === f1.capacityT, false);
 
 
 // ------------------------------------------------------------
@@ -248,6 +257,34 @@ check('outside a corner is not inside', pointInPolygon(4.5, 4.5, polygon), false
 const idleState = stabilityFor(idle);
 check('idle DEPLOYED crane -> ok', idleState.stability, 'ok');
 check('idle stability inputs valid', idleState.stabilityInputsValid, true);
+
+const halfIdle = {
+  ...idle,
+  outrigger_state: OUTRIGGER_STATES.HALF,
+};
+const halfIdleState = stabilityFor(halfIdle);
+check('HALF support polygon narrows to 4.2 m', halfIdleState.polygon[1].x, 2.1);
+check('HALF idle crane uses its selected geometry', halfIdleState.stability, 'ok');
+const halfPads = padReactionsFor({ ...halfIdle, slew_deg: 0 });
+check('HALF pad reactions are computed', halfPads.computed, true);
+check('HALF pad positions affect reactions', halfPads.FL === idlePads.FL, false);
+
+const invalidState = {
+  ...idle,
+  boom_length_m: 38,
+  radius_m: 12,
+  outrigger_state: 'UNKNOWN',
+};
+const invalidCapacity = capacityFor(invalidState);
+check('invalid outrigger state has no capacity data', invalidCapacity.capacityDataAvailable, false);
+check('invalid outrigger state capacity is null', invalidCapacity.capacityT, null);
+const invalidStability = stabilityFor({ ...invalidState, load_t: 5 });
+check('invalid outrigger state has no support polygon', invalidStability.polygon.length, 0);
+check('invalid outrigger state stability is not computable', invalidStability.stability, null);
+check('invalid outrigger state marks stability inputs invalid', invalidStability.stabilityInputsValid, false);
+check('invalid outrigger state has no pad reactions',
+  JSON.stringify(padReactionsFor(invalidState)),
+  JSON.stringify({ FL: 0, FR: 0, RL: 0, RR: 0, deployed: false, computed: true }));
 
 const retractedState = stabilityFor({ ...idle, outrigger_state: 'RETRACTED' });
 check('retracted crane -> ok (nothing supported)', retractedState.stability, 'ok');

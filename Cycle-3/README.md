@@ -348,7 +348,7 @@ Key responsibilities:
 
 * Look up rated capacity for the Grove GMK5250L-1.
 * Determine rated capacity using boom length, boom angle, working radius, and outrigger configuration.
-* Handle full-outrigger and on-rubber operating conditions using the existing load-chart data.
+* Handle explicit `FULL` and `HALF` outrigger states without substituting one state's capacity for another.
 * Interpolate between available load-chart values where required.
 * Calculate crane stability using the existing tested stability implementation.
 * Maintain a single source of truth for load-chart and stability calculations.
@@ -368,37 +368,49 @@ The lookup uses:
 
 The module uses the existing chart data rather than hard-coded capacity values in the Cycle 3 UI.
 
+The supplied chart contains only the `FULL` configuration (7.8 m spread). `HALF`
+is represented as a 4.2 m transverse support spread for geometry and pad
+reactions, but its rated-capacity column is currently unavailable. Therefore
+`capacityFor()` returns `capacityT: null` and `capacityDataAvailable: false`
+for explicit `HALF` samples until verified manufacturer values are supplied.
+Legacy `DEPLOYED` samples and samples without an outrigger state retain the
+existing FULL behavior.
+
 Where required, interpolation is performed between available chart values.
 
 If the operating condition is not permitted by the load chart, the module returns `null`. The Sensor Panel displays this condition as **NOT PERMITTED**.
 
 #### Cross-check against the manufacturer PDF (review items 1 and 2)
 
-`loadchart.js` cites `https://www.manitowoc.com/media/15016/download`. That PDF is not stored in the repository, so it was downloaded and read cell by cell against our table:
+`loadchart.js` cites `https://www.manitowoc.com/media/15016/download`.
+That PDF is not stored in the repository, and the manufacturer source has not
+been verified in this workspace. The following Item 1 analysis and table are
+retained from the original README as documentation only, not as an independent
+verification of the manufacturer source.
 
-* Page 17 — *Telescopic boom*, `13,3 – 70,0 m | 7,8 m | 360 ° | 80 t | EN 13000`, which is exactly the configuration `CHART.config` declares.
-* All **35** cells of our 5 boom × 7 radius table were read out of that page and compared with `CHART.capacityT`.
-* **34 of 35 cells match the PDF exactly.** One did not — item 2 below.
+**Item 1 — radius 10.00 m at boom 45.6 m (12:18:00 and 12:19:50).** The
+original documentation records r = 10 m as allowed for this boom length.
 
-**Item 1 — radius 10.00 m at boom 45.6 m (12:18:00 and 12:19:50).** Yes, r = 10 m **is** allowed for this boom length.
-
-| PDF, radius 10 m | 42,3 m | **45,4 m** | **48,9 m** | 52,4 m | 56,2 m | 60,5 m | 64,6 m → 70,0 m |
+| Recorded reference, radius 10 m | 42,3 m | **45,4 m** | **48,9 m** | 52,4 m | 56,2 m | 60,5 m | 64,6 m → 70,0 m |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Rated capacity | 47.5 t | **42.5 t** | **37.0 t** | 31.0 t | 26.0 t | 21.5 t | blank |
 
-* 45.6 m lies between the PDF's 45,4 m and 48,9 m boom columns, and **both** have a value at r = 10 m, so the combination is inside the permitted region — no blank cell is interpolated across.
-* The PDF's own minimum permitted radius grows with boom length: 45,4 m boom → 7 m, 48,9 m → 8 m, 52,4 m → 9 m. At 10 m there is margin.
-* Our coarser 5-row table interpolates between 38 m (53.0 t) and 52,4 m (31.0 t) and returns **41.4 t**; interpolating the PDF's finer columns gives 42.2 t. Both say *permitted*; the 0.8 t difference is only the boom-grid coarseness.
+* 45.6 m lies between the recorded 45,4 m and 48,9 m boom columns, and both have a value at r = 10 m, so the combination is treated as inside the permitted region — no blank cell is interpolated across.
+* The original documentation records a minimum permitted radius that grows with boom length: 45,4 m boom → 7 m, 48,9 m → 8 m, 52,4 m → 9 m. At 10 m there is margin.
+* The repository's coarser 5-row table interpolates between 38 m (53.0 t) and 52,4 m (31.0 t) and returns **41.4 t**.
 * The detector therefore reports **NORMAL** on both rows: capacity 41.4 t, load 0 t, utilisation 0 %.
 
-The blank device LMI on those two rows is a reporting artefact, not a chart restriction. Over the whole 39,301-row recording the device and our chart agree on *permitted* in 39,189 rows and on *not permitted* in 109 rows, and disagree in exactly **2** rows — 12:18:00 and 12:19:50, both at exactly r = 10.00 m with load 0. The device blanks its LMI for the whole excursion 12:18:00 → 12:19:50 (111 rows), which drives in from boom 45,60 m / r 10,00 m to boom 52,40 m / r 8,00 m and back out; the two permitted boundary rows are blanked together with the 109 genuinely not-permitted rows. The only window the PDF also refuses is 12:18:40 – 12:19:10 (31 rows, boom 52,40 m, r < 10 m), and it raises `NOT_PERMITTED` (F5) as intended.
+The blank device LMI on those two rows is treated as a reporting artefact,
+not a chart restriction. The recording and repository chart disagree in
+exactly **2** rows — 12:18:00 and 12:19:50, both at exactly r = 10.00 m with
+load 0.
 
-**Item 2 — 70 m boom / 30 m radius.** The PDF gives **12.1 t**, our table had 12.4 t. The number sits in the `70,0 m` column of the `30,0 m` radius row (12,3 t at 66,9 m, 11,4 t at 32 m), so 12,1 is unambiguous. The table cell and its validation cell were corrected **12.4 t → 12.1 t** — the old value was 0.3 t (2.5 %) optimistic, which is the dangerous direction for a rated capacity. No alarm changes: the only boom-70 row in the recording is the impossible 15:00 row, which is outside the chart radius range anyway. After the correction all **35** cells of our table match the PDF.
-
-Two honest limitations of the 5 × 7 table, both *conservative* (they can only under-state capacity, never over-state it):
-
-* The null at 52,4 m / 8 m makes the whole 8–10 m radius band not-permitted for booms above 38 m, because we never interpolate across a null cell. The device agrees on all 109 of those rows; the PDF's finer grid would allow some of them (e.g. 45,4 m boom permits down to 7 m).
-* The only row where the chart says `null` but the device still shows an LMI is 14:30:00 — one of the three impossible rows (radius 40 m with a 32 m boom).
+**Item 2 — 70 m boom / 30 m radius.** The supplied repository chart contains
+**12.4 t**, while the existing Cycle 3 test expects **12.1 t**. The original
+chart source has not been verified well enough in this workspace to correct
+either value, so the discrepancy remains an explicit pre-existing test
+failure. No alarm changes: the only boom-70 row in the recording is the
+impossible 15:00 row, which is outside the chart radius range anyway.
 
 ### 3. Stability Calculation
 
@@ -482,11 +494,11 @@ The Sensor Panel uses the shared rated-capacity result and does not maintain a s
 `craneModel.js` re-exports the Cycle 2 primitives (`CHART`, `ratedCapacity`, `radiusFromAngle`, `pointInPolygon`, `loadGroundPosition`, `edgeDistanceM`, `stabilityVerdict`, `combinedCoG`, `outriggerPolygonForSpread`) and adds the sample-level API the rest of Cycle 3 calls:
 
 ```text
-capacityFor(sample)       -> { capacityT, capacityInputsValid, utilization }
+capacityFor(sample)       -> { capacityT, capacityInputsValid, capacityDataAvailable, utilization }
 stabilityFor(sample)      -> { stability, stabilityInputsValid, cog, polygon }
 padReactionsFor(sample)   -> { FL, FR, RL, RR, deployed, computed }
 kitCombinedCoG(sample)    -> { x, z, totalT }
-supportPolygon()          -> the four pad positions as a ring
+supportPolygon(sample)    -> the four state-selected pad positions as a ring
 craneStateFor(sample)     -> all of the above in one call
 ```
 
@@ -555,22 +567,22 @@ This is enforced, not just intended. `failureDetector.js` imports `KIT`, `capaci
 | Item | Source / Implementation | Status |
 | ------------------------- | ------------------------------------------------ | ---------------------- |
 | Rated capacity | Grove GMK5250L-1 chart in `Cycle-2/js/loadchart.js`, read through `capacityFor()` | Computed, tested |
-| Manufacturer PDF cross-check | All 35 chart cells read from page 17 of `manitowoc.com/media/15016/download` (7,8 m / 80 t / 360° / EN 13000) | 34/35 matched; 1 cell corrected 12.4 → 12.1 t |
+| Manufacturer source status | `loadchart.js` cites `https://www.manitowoc.com/media/15016/download` | Not verified in this workspace |
 | Load-chart lookup | `ratedCapacity()` bilinear lookup, exact cells verified to 0 % | Computed, tested |
 | Load-chart interpolation | `ratedCapacity()` between chart rows/columns (60.5 t and 38.1 t midpoints) | Computed, tested |
 | Null / not-permitted cell | `capacityT = null`, `utilization = null` (e.g. 52.4 m / 8 m, row `F5`) | Computed, tested |
-| Outrigger configuration | Full outriggers, 7.8 m spread — the only configuration in the supplied chart and in the recording | Kit configuration |
+| Outrigger configuration | `FULL` = 7.8 m transverse × 8.9 m longitudinal; `HALF` = 4.2 m transverse × 8.9 m longitudinal | Geometry selected in `craneModel.js`; HALF chart data unavailable |
 | On-rubber capacity | No on-rubber chart exists in the kit, so no number is invented; the module keeps returning the full-outrigger chart value | Not modelled |
 | Working radius | Telemetry `radius_m`, cross-checked against `radiusFromAngle(L, θ, 0.8)` on all 39,301 rows (3 impossible rows excepted) | Data-driven + tested |
 | Combined CoG | `kitCombinedCoG()`: 45 + 35 t at the slew centre, 80 t counterweight at 3.5 m on `slew + 180°`, 10 t boom at half the horizontal reach, hook load at the radius | Computed, tested |
-| Outrigger support polygon | `supportPolygon()` from `KIT.PAD_POSITIONS` (±3.9, ±4.45 m) | Computed, tested |
-| Pad reactions | `padReactionsFor()`, rigid-body plane formula; matches the recorded pads to **0.02427 t** worst case on 31,804 of 31,860 `DEPLOYED` rows | Computed, tested against the recording |
+| Outrigger support polygon | `supportPolygon(sample)` from the selected state (FULL ±3.9/±4.45 m; HALF ±2.1/±4.45 m) | Computed, tested |
+| Pad reactions | `padReactionsFor()`, rigid-body plane formula using the selected state's pad geometry; matches the recorded FULL pads to **0.02427 t** worst case on 31,804 of 31,860 `DEPLOYED` rows | Computed, tested against the recording |
 | Stability verdict | Cycle 2 `stabilityVerdict()` re-exported; `ok` / `warn` / `tipping` against the polygon | Computed, tested |
 | Utilisation | `load / capacityFor().capacityT` (52 t / 47.5 t = 109.47 % at 09:00) | Computed, tested |
 | Kit masses, tail radius, pivot offset, pad near-lift threshold | `KIT` constants from `README-for-students.md` §2 — synthetic kit assumptions, not manufacturer figures | Kit constants |
 | Warn margin 1.5 m | Cycle 2 starter-kit default (`DEFAULT_WARN_MARGIN_M`) | Team threshold |
-| Chart tests | `js/test_craneModel.mjs` sections 1–2 | Tested (83 assertions) |
-| Stability tests | `js/test_craneModel.mjs` sections 3–5 | Tested (83 assertions) |
+| Chart tests | `js/test_craneModel.mjs` sections 1–2, including missing HALF data | Tested |
+| Stability tests | `js/test_craneModel.mjs` sections 3–5, including HALF geometry and pad reactions | Tested |
 | Single-source check | `js/test_craneModel.mjs` section 6 | Tested |
 | Overload decision | Module 2 detector using Module 3 `capacityT` / `utilization` | Integrated |
 | Stability decision | Module 2 detector using Module 3 `stability` / `cog` | Integrated |

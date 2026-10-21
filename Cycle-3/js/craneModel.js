@@ -69,6 +69,7 @@ export const KIT = Object.freeze({
   OUTRIGGER_LENGTH_M: 8.9,
   OUTRIGGER_SPREAD_X: 7.8,
   OUTRIGGER_SPREAD_Z: 8.9,
+  HALF_OUTRIGGER_SPREAD_X: 4.2,
 
   CARRIER_MASS_T: 45,
   SUPERSTRUCTURE_MASS_T: 35,
@@ -90,7 +91,50 @@ export const KIT = Object.freeze({
   WARN_MARGIN_M: DEFAULT_WARN_MARGIN_M,
 });
 
+export const OUTRIGGER_STATES = Object.freeze({
+  FULL: 'FULL',
+  HALF: 'HALF',
+});
+
+const INVALID_OUTRIGGER_STATE = Symbol('INVALID_OUTRIGGER_STATE');
+const INACTIVE_OUTRIGGER_STATE = Symbol('INACTIVE_OUTRIGGER_STATE');
+
+const OUTRIGGER_CHARTS = Object.freeze({
+  FULL: CHART,
+  HALF: null,
+});
+
 const isNum = value => Number.isFinite(value);
+
+function outriggerStateFor(sample) {
+  if (sample == null || typeof sample !== 'object' || sample.outrigger_state == null) {
+    return OUTRIGGER_STATES.FULL;
+  }
+  if (sample.outrigger_state === OUTRIGGER_STATES.HALF) return OUTRIGGER_STATES.HALF;
+  if (sample.outrigger_state === OUTRIGGER_STATES.FULL
+    || sample.outrigger_state === 'DEPLOYED') {
+    return OUTRIGGER_STATES.FULL;
+  }
+  if (sample.outrigger_state === 'DEPLOYING'
+    || sample.outrigger_state === 'RETRACTED'
+    || sample.outrigger_state === 'RETRACTING') {
+    return INACTIVE_OUTRIGGER_STATE;
+  }
+  return INVALID_OUTRIGGER_STATE;
+}
+
+function padPositionsFor(state) {
+  const halfWidth = state === OUTRIGGER_STATES.HALF
+    ? KIT.HALF_OUTRIGGER_SPREAD_X / 2
+    : KIT.OUTRIGGER_SPREAD_X / 2;
+  const halfDepth = KIT.OUTRIGGER_SPREAD_Z / 2;
+  return {
+    fl: { x: -halfWidth, z: -halfDepth },
+    fr: { x: halfWidth, z: -halfDepth },
+    rl: { x: -halfWidth, z: halfDepth },
+    rr: { x: halfWidth, z: halfDepth },
+  };
+}
 
 
 // ------------------------------------------------------------
@@ -100,8 +144,10 @@ const isNum = value => Number.isFinite(value);
 // PAD_POSITIONS instead of being re-typed per module.
 // ------------------------------------------------------------
 
-export function supportPolygon() {
-  const p = KIT.PAD_POSITIONS;
+export function supportPolygon(sample) {
+  const state = outriggerStateFor(sample);
+  if (state === INVALID_OUTRIGGER_STATE) return [];
+  const p = padPositionsFor(state);
   return [
     { x: p.fl.x, z: p.fl.z },
     { x: p.fr.x, z: p.fr.z },
@@ -156,8 +202,8 @@ export function kitCombinedCoG(sample) {
 // ------------------------------------------------------------
 
 export function padReactionsFor(sample) {
-  const deployed = sample != null && typeof sample === 'object'
-    && sample.outrigger_state === 'DEPLOYED';
+  const state = outriggerStateFor(sample);
+  const deployed = state === OUTRIGGER_STATES.FULL || state === OUTRIGGER_STATES.HALF;
 
   if (!deployed) {
     return { FL: 0, FR: 0, RL: 0, RR: 0, deployed: false, computed: true };
@@ -168,7 +214,7 @@ export function padReactionsFor(sample) {
     return { FL: NaN, FR: NaN, RL: NaN, RR: NaN, deployed: true, computed: false };
   }
 
-  const p = KIT.PAD_POSITIONS;
+  const p = padPositionsFor(state);
   const sumX2 = KIT.PAD_ORDER.reduce((sum, key) => sum + p[key].x * p[key].x, 0);
   const sumZ2 = KIT.PAD_ORDER.reduce((sum, key) => sum + p[key].z * p[key].z, 0);
   const W = cog.totalT;
@@ -203,7 +249,12 @@ export function padReactionsFor(sample) {
 
 export function capacityFor(sample) {
   if (sample == null || typeof sample !== 'object') {
-    return { capacityT: null, capacityInputsValid: false, utilization: null };
+    return {
+      capacityT: null,
+      capacityInputsValid: false,
+      capacityDataAvailable: false,
+      utilization: null,
+    };
   }
 
   const boomLengthM = sample.boom_length_m;
@@ -211,14 +262,21 @@ export function capacityFor(sample) {
   const loadT = sample.load_t;
 
   const capacityInputsValid = isNum(boomLengthM) && isNum(radiusM);
-  const capacityT = capacityInputsValid
-    ? ratedCapacity(CHART, boomLengthM, radiusM)
+  const state = outriggerStateFor(sample);
+  const chart = state === INVALID_OUTRIGGER_STATE
+    ? null
+    : state === INACTIVE_OUTRIGGER_STATE
+      ? CHART
+      : OUTRIGGER_CHARTS[state];
+  const capacityDataAvailable = chart != null;
+  const capacityT = capacityInputsValid && capacityDataAvailable
+    ? ratedCapacity(chart, boomLengthM, radiusM)
     : null;
   const utilization = capacityT != null && isNum(loadT) && capacityT > 0
     ? loadT / capacityT
     : null;
 
-  return { capacityT, capacityInputsValid, utilization };
+  return { capacityT, capacityInputsValid, capacityDataAvailable, utilization };
 }
 
 
@@ -230,7 +288,7 @@ export function capacityFor(sample) {
 // ------------------------------------------------------------
 
 export function stabilityFor(sample) {
-  const polygon = supportPolygon();
+  const polygon = supportPolygon(sample);
 
   if (sample == null || typeof sample !== 'object') {
     return { stability: null, stabilityInputsValid: false, cog: { x: 0, z: 0 }, polygon };
@@ -239,14 +297,19 @@ export function stabilityFor(sample) {
   const cogResult = kitCombinedCoG(sample);
   const cog = cogResult == null ? { x: 0, z: 0 } : { x: cogResult.x, z: cogResult.z };
   const geometryValid = cogResult != null;
-  const deployed = sample.outrigger_state === 'DEPLOYED';
+  const state = outriggerStateFor(sample);
+  const deployed = state === OUTRIGGER_STATES.FULL || state === OUTRIGGER_STATES.HALF;
+  const stateValid = state !== INVALID_OUTRIGGER_STATE;
   const loadT = sample.load_t;
   const working = isNum(loadT) && loadT > 0;
 
   let stability = 'ok';
   let stabilityInputsValid = true;
 
-  if (deployed && working && !geometryValid) {
+  if (!stateValid) {
+    stability = null;
+    stabilityInputsValid = false;
+  } else if (deployed && working && !geometryValid) {
     stability = null;
     stabilityInputsValid = false;
   } else if (deployed && working) {
