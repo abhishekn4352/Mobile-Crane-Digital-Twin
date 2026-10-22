@@ -97,6 +97,7 @@ function withNeutralPads(sample) {
  */
 export function analyseSample(sample, prev, deps, opts = {}) {
   const manual = !!opts.manual;
+  const cwtT = opts.cwtT ?? 80;
   const quality = assessSample(sample, manual ? null : prev);
 
   // The previous row goes to the detector's rate check only if that row is itself believable.
@@ -106,7 +107,7 @@ export function analyseSample(sample, prev, deps, opts = {}) {
   // --- clean input for the detector
   let input = sample;
   if (manual && sample) input = withNeutralPads(sample);
-  let detection = deps.detect(input, prevArg);
+  let detection = deps.detect(input, prevArg, cwtT);
   if (!manual && sample && sample.lmi_pct === 0) {
     // 0 is a blank cell (parseCSV) when there is a load on the hook, or when the chart has no
     // capacity here; the kit says lmi_pct is empty in that case. Hand the detector NaN instead.
@@ -114,7 +115,7 @@ export function analyseSample(sample, prev, deps, opts = {}) {
     const blank = (fin(sample.load_t) && sample.load_t > 0.5) || (d0 && d0.capacityInputsValid && d0.capacityT === null);
     if (blank) {
       input = { ...sample, lmi_pct: NaN };
-      detection = deps.detect(input, prevArg);
+      detection = deps.detect(input, prevArg, cwtT);
     }
   }
   const derived = (detection && detection.derived) || null;
@@ -557,16 +558,24 @@ export class PanelSession {
     this.deps = deps;
     this.log = new AlarmLog();
     this.mode = MODE.LIVE;
+    this.cwtT = 80;                       // active counterweight: 80 or 40
     this.lastIdx = null;
     this._fromManual = false;
     this._memo = { i: -1, a: null };
     this.lastAnalysis = null;
   }
 
+  /** Switch the active counterweight config and reset the alarm log + analysis cache. */
+  setCounterweight(cwtT) {
+    this.cwtT = cwtT;
+    this.log.reset();
+    this._memo = { i: -1, a: null };
+  }
+
   /** Analysis of recording row i (same answer however the playback got there). */
   analyseRow(i) {
     if (this._memo.i === i) return this._memo.a;
-    const a = analyseSample(this.rows[i], i > 0 ? this.rows[i - 1] : null, this.deps);
+    const a = analyseSample(this.rows[i], i > 0 ? this.rows[i - 1] : null, this.deps, { cwtT: this.cwtT });
     this._memo = { i, a };
     return a;
   }
@@ -576,7 +585,7 @@ export class PanelSession {
     return (raised) => {
       let found = { ts: this.rows[index].ts, raised };
       for (let k = index - 1; k >= 0 && index - k <= MAX_LOOKBACK_ROWS; k--) {
-        const a = analyseSample(this.rows[k], k > 0 ? this.rows[k - 1] : null, this.deps);
+        const a = analyseSample(this.rows[k], k > 0 ? this.rows[k - 1] : null, this.deps, { cwtT: this.cwtT });
         const hit = a.raised.find((x) => x.kind === raised.kind && x.type === raised.type);
         if (!hit) break;
         found = { ts: a.ts, raised: hit };
@@ -622,7 +631,7 @@ export class PanelSession {
   manualUpdate(sample) {
     this.mode = MODE.MANUAL;
     this._fromManual = true;
-    const analysis = analyseSample(sample, null, this.deps, { manual: true });
+    const analysis = analyseSample(sample, null, this.deps, { manual: true, cwtT: this.cwtT });
     this.log.ingest(analysis, { simulated: true });
     this.lastAnalysis = analysis;
     return buildPanelModel(analysis, this.log, MODE.MANUAL);
@@ -654,11 +663,11 @@ export class PanelSession {
  *          (`index` = position in `rows` of the first row of the episode; with repeated timestamps it can
  *          differ from the first row that has that ts)
  */
-export function buildEventIndex(rows, deps) {
+export function buildEventIndex(rows, deps, cwtT = 80) {
   const log = new AlarmLog(Number.MAX_SAFE_INTEGER);
   for (let i = 0; i < rows.length; i++) {
     const n = log.entries.length;
-    log.ingest(analyseSample(rows[i], i > 0 ? rows[i - 1] : null, deps));
+    log.ingest(analyseSample(rows[i], i > 0 ? rows[i - 1] : null, deps, { cwtT }));
     for (let k = n; k < log.entries.length; k++) log.entries[k].index = i;     // the row on which the episode was first seen
   }
   return log.entries

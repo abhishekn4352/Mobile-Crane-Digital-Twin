@@ -152,6 +152,15 @@ details ul{margin:6px 0 0;padding-left:16px;color:var(--muted)}
     <span class="pill" data-f="quality" data-cls="mute" title="OK / STALE (dropout, repeated timestamp) / BAD DATA (impossible row)">DATA OK</span>
     <span id="qdetail" data-f="qualityDetail"></span>
     <button class="btn" data-return-live hidden>Return to LIVE</button>
+    <!-- Counterweight configuration selector -->
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap">
+      Counterweight
+      <select id="cwt" aria-label="Counterweight configuration" title="Switch between 80 t (standard) and 40 t (half capacity) counterweight">
+        <option value="80" selected>80 t (standard)</option>
+        <option value="40">40 t (half capacity)</option>
+      </select>
+    </label>
+    <span class="pill" id="cwtBadge" data-cls="ok" title="Active counterweight — capacity chart changes with this setting">80 t CWT</span>
     <div class="clock" data-f="time" title="Timestamp (ts) of the sample on screen">--:--:--</div>
   </header>
 
@@ -593,7 +602,8 @@ async function start() {
   jump.disabled = true;
   const GROUPS = [['critical', 'Failures'], ['warning', 'Warnings and device conditions'], ['data', 'Data problems']];
   function fillJump() {
-    const events = buildEventIndex(rows, { detect: detectFailures, expectedPressure: expectedHydraulicPressure });
+    const cwtT = Number(document.getElementById('cwt')?.value ?? 80);
+    const events = buildEventIndex(rows, { detect: detectFailures, expectedPressure: expectedHydraulicPressure }, cwtT);
     jump.textContent = '';
     jump.appendChild(new Option(`Jump to… (${events.length} events found in this recording)`, ''));
     for (const [sev, label] of GROUPS) {
@@ -617,7 +627,30 @@ async function start() {
     cam: { target: tg, set(dist, theta, phi) { tgTarget.copy(tg); rT = r = dist; if (theta !== undefined) th = theta; if (phi !== undefined) ph = phi; } } };
   onClock(clock.currentTelemetrySample, clock);
   setTimeout(fillJump, 0);                              // after the first paint (the scan takes a fraction of a second)
+
+  // ── counterweight config selector ────────────────────────────────────────
+  const cwtSelEl = $('cwt');
+  const cwtBadgeEl = $('cwtBadge');
+  if (cwtSelEl) {
+    cwtSelEl.onchange = function () {
+      const cwtT = Number(cwtSelEl.value);
+      if (cwtBadgeEl) {
+        cwtBadgeEl.textContent = `${cwtT} t CWT`;
+        cwtBadgeEl.dataset.cls = cwtT === 40 ? 'warn' : 'ok';
+      }
+      session.setCounterweight(cwtT);          // resets alarm log + analysis cache
+      if (clock.mode === MODE.LIVE) {
+        const i = clock.currentIndex;
+        const vm = session.liveUpdate(i, false);
+        present(vm, rows[i], MODE.LIVE);        // every readout and alarm updates immediately
+      } else {
+        manualInput(panel.readSliders());
+      }
+      fillJump();                              // rebuild Jump-to event index for the new chart
+    };
+  }
 }
 start();
+
 </script>
 </body></html>

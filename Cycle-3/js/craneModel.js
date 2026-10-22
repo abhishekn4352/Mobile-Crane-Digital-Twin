@@ -55,6 +55,28 @@ export {
   DEFAULT_WARN_MARGIN_M,
 };
 
+// ------------------------------------------------------------
+// 40 t counterweight chart: same grid as 80 t, every value × 0.5
+// ------------------------------------------------------------
+export const CHART_40T = Object.freeze({
+  model:  CHART.model,
+  source: CHART.source,
+  config: 'Full outriggers — 7.8 m spread | 40 t counterweight | 360° | EN 13000 (capacity ×0.5)',
+  boomLengthsM: CHART.boomLengthsM,
+  radiiM:       CHART.radiiM,
+  capacityT:    CHART.capacityT.map(row => Object.freeze(row.map(v => v === null ? null : v * 0.5))),
+});
+
+/** Returns the load-chart object for a given counterweight tonnage. */
+export function chartFor(cwtT) {
+  return cwtT === 40 ? CHART_40T : CHART;
+}
+
+/** Total machine mass (t) for a given counterweight tonnage. */
+export function machineMassT(cwtT) {
+  return KIT.CARRIER_MASS_T + KIT.SUPERSTRUCTURE_MASS_T + cwtT + KIT.BOOM_MASS_T;
+}
+
 
 // ------------------------------------------------------------
 // Kit constants (README-for-students.md §2)
@@ -118,14 +140,14 @@ export function supportPolygon() {
 // load / radius / slew are not usable numbers.
 // ------------------------------------------------------------
 
-export function kitCombinedCoG(sample) {
+export function kitCombinedCoG(sample, cwtT = KIT.COUNTERWEIGHT_MASS_T) {
   if (sample == null || typeof sample !== 'object') return null;
   const loadT = sample.load_t;
   const radiusM = sample.radius_m;
   const slewDeg = sample.slew_deg;
   if (!isNum(loadT) || !isNum(radiusM) || !isNum(slewDeg)) return null;
 
-  const totalT = KIT.MACHINE_MASS_T + loadT;
+  const totalT = machineMassT(cwtT) + loadT;
   if (totalT <= 0) return null;
 
   const hook = loadGroundPosition(radiusM, slewDeg);
@@ -133,10 +155,10 @@ export function kitCombinedCoG(sample) {
   const boom = loadGroundPosition(radiusM / 2, slewDeg);
 
   return {
-    x: (KIT.COUNTERWEIGHT_MASS_T * counterweight.x
+    x: (cwtT * counterweight.x
       + KIT.BOOM_MASS_T * boom.x
       + loadT * hook.x) / totalT,
-    z: (KIT.COUNTERWEIGHT_MASS_T * counterweight.z
+    z: (cwtT * counterweight.z
       + KIT.BOOM_MASS_T * boom.z
       + loadT * hook.z) / totalT,
     totalT,
@@ -155,7 +177,7 @@ export function kitCombinedCoG(sample) {
 // (tipping / lift-off).
 // ------------------------------------------------------------
 
-export function padReactionsFor(sample) {
+export function padReactionsFor(sample, cwtT = KIT.COUNTERWEIGHT_MASS_T) {
   const deployed = sample != null && typeof sample === 'object'
     && sample.outrigger_state === 'DEPLOYED';
 
@@ -163,7 +185,7 @@ export function padReactionsFor(sample) {
     return { FL: 0, FR: 0, RL: 0, RR: 0, deployed: false, computed: true };
   }
 
-  const cog = kitCombinedCoG(sample);
+  const cog = kitCombinedCoG(sample, cwtT);
   if (cog == null) {
     return { FL: NaN, FR: NaN, RL: NaN, RR: NaN, deployed: true, computed: false };
   }
@@ -201,7 +223,7 @@ export function padReactionsFor(sample) {
 // inputs themselves are unusable, true when the chart refused.
 // ------------------------------------------------------------
 
-export function capacityFor(sample) {
+export function capacityFor(sample, cwtT = KIT.COUNTERWEIGHT_MASS_T) {
   if (sample == null || typeof sample !== 'object') {
     return { capacityT: null, capacityInputsValid: false, utilization: null };
   }
@@ -212,7 +234,7 @@ export function capacityFor(sample) {
 
   const capacityInputsValid = isNum(boomLengthM) && isNum(radiusM);
   const capacityT = capacityInputsValid
-    ? ratedCapacity(CHART, boomLengthM, radiusM)
+    ? ratedCapacity(chartFor(cwtT), boomLengthM, radiusM)
     : null;
   const utilization = capacityT != null && isNum(loadT) && capacityT > 0
     ? loadT / capacityT
@@ -229,14 +251,14 @@ export function capacityFor(sample) {
 // null = the verdict could not be computed from this sample.
 // ------------------------------------------------------------
 
-export function stabilityFor(sample) {
+export function stabilityFor(sample, cwtT = KIT.COUNTERWEIGHT_MASS_T) {
   const polygon = supportPolygon();
 
   if (sample == null || typeof sample !== 'object') {
     return { stability: null, stabilityInputsValid: false, cog: { x: 0, z: 0 }, polygon };
   }
 
-  const cogResult = kitCombinedCoG(sample);
+  const cogResult = kitCombinedCoG(sample, cwtT);
   const cog = cogResult == null ? { x: 0, z: 0 } : { x: cogResult.x, z: cogResult.z };
   const geometryValid = cogResult != null;
   const deployed = sample.outrigger_state === 'DEPLOYED';
@@ -261,10 +283,10 @@ export function stabilityFor(sample) {
 // Convenience: every Module 3 number for one sample
 // ------------------------------------------------------------
 
-export function craneStateFor(sample) {
+export function craneStateFor(sample, cwtT = KIT.COUNTERWEIGHT_MASS_T) {
   return {
-    ...capacityFor(sample),
-    ...stabilityFor(sample),
-    pads: padReactionsFor(sample),
+    ...capacityFor(sample, cwtT),
+    ...stabilityFor(sample, cwtT),
+    pads: padReactionsFor(sample, cwtT),
   };
 }
