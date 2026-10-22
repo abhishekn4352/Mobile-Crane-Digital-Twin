@@ -155,8 +155,8 @@ export function analyseSample(sample, prev, deps, opts = {}) {
   const inputsOk = fin(sample && sample.boom_length_m) && fin(sample && sample.radius_m);
   const capT = derived ? derived.capacityT : null;
   const capacity = !inputsOk || (capT !== null && !fin(capT))
-    ? { kind: 'unknown', t: null }
-    : capT === null ? { kind: 'not-permitted', t: null } : { kind: 'value', t: capT };
+    ? { kind: 'unknown', t: null, cwtT }
+    : capT === null ? { kind: 'not-permitted', t: null, cwtT } : { kind: 'value', t: capT, cwtT };
   const utilPct = derived && fin(derived.utilization) ? derived.utilization * 100 : null;
 
   // --- device LMI vs the chart (the detector's LMI_DIVERGENCE decides "mismatch")
@@ -415,8 +415,12 @@ export function buildPanelModel(analysis, log, mode) {
 
   // ---- capacity / utilisation / stability (from the shared modules, via the detector)
   const cap = analysis.capacity;
+  const isAssumed = (cap && cap.cwtT === 40) || analysis.cwtT === 40;
+  const capSub = isAssumed
+    ? 'ASSUMED, not manufacturer data'
+    : 'from the load chart';
   const capacity = cap.kind === 'value'
-    ? { text: `${fmt(cap.t, 1)} t`, cls: cls.ok, sub: 'from the load chart' }
+    ? { text: `${fmt(cap.t, 1)} t`, cls: cls.ok, sub: capSub }
     : cap.kind === 'not-permitted'
       ? { text: 'NOT PERMITTED', cls: s.load_t > 0.5 ? cls.crit : cls.warn, sub: 'chart has no capacity for this boom + radius' }
       : { text: '—', cls: cls.mute, sub: 'boom length or radius unknown' };

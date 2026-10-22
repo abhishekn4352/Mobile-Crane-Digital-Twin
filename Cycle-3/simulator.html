@@ -157,10 +157,10 @@ details ul{margin:6px 0 0;padding-left:16px;color:var(--muted)}
       Counterweight
       <select id="cwt" aria-label="Counterweight configuration" title="Switch between 80 t (standard) and 40 t (half capacity) counterweight">
         <option value="80" selected>80 t (standard)</option>
-        <option value="40">40 t (half capacity)</option>
+        <option value="40">40 t (ASSUMED, not manufacturer data)</option>
       </select>
     </label>
-    <span class="pill" id="cwtBadge" data-cls="ok" title="Active counterweight — capacity chart changes with this setting">80 t CWT</span>
+    <span class="pill" id="cwtBadge" data-cls="ok" title="Active counterweight — 80 t (manufacturer data)">80 t CWT</span>
     <div class="clock" data-f="time" title="Timestamp (ts) of the sample on screen">--:--:--</div>
   </header>
 
@@ -635,7 +635,10 @@ async function start() {
     cwtSelEl.onchange = function () {
       const cwtT = Number(cwtSelEl.value);
       if (cwtBadgeEl) {
-        cwtBadgeEl.textContent = `${cwtT} t CWT`;
+        cwtBadgeEl.textContent = cwtT === 40 ? '40 t CWT (ASSUMED)' : `${cwtT} t CWT`;
+        cwtBadgeEl.title = cwtT === 40
+          ? '40 t counterweight — ASSUMED, not manufacturer data'
+          : '80 t counterweight (manufacturer data)';
         cwtBadgeEl.dataset.cls = cwtT === 40 ? 'warn' : 'ok';
       }
       session.setCounterweight(cwtT);          // resets alarm log + analysis cache

@@ -5,7 +5,6 @@ import {
   stabilityFor,
   radiusFromAngle,
   padReactionsFor,
-  machineMassT,
 } from './craneModel.js';
 
 const PAD_NEAR_LIFT_T = KIT.PAD_NEAR_LIFT_T;
@@ -33,7 +32,7 @@ function signedAngleDelta(current, previous) {
   return Math.abs(delta);
 }
 
-function validPreviousTelemetryForRates(telemetry, cwtT = 80) {
+function validPreviousTelemetryForRates(telemetry) {
   if (!telemetry || !validTimestamp(telemetry.ts)) return false;
 
   const {
@@ -58,7 +57,7 @@ function validPreviousTelemetryForRates(telemetry, cwtT = 80) {
   if (telemetry.outrigger_state === 'DEPLOYED') {
     const pads = [telemetry.pad_fl_t, telemetry.pad_fr_t, telemetry.pad_rl_t, telemetry.pad_rr_t];
     if (pads.some(value => !finite(value))) return false;
-    if (Math.abs(pads.reduce((sum, value) => sum + value, 0) - (machineMassT(cwtT) + loadT)) > PAD_SUM_TOLERANCE) {
+    if (Math.abs(pads.reduce((sum, value) => sum + value, 0) - (KIT.MACHINE_MASS_T + loadT)) > PAD_SUM_TOLERANCE) {
       return false;
     }
   }
@@ -66,7 +65,7 @@ function validPreviousTelemetryForRates(telemetry, cwtT = 80) {
   return true;
 }
 
-function validationErrors(telemetry, previousTelemetry, cwtT = 80) {
+function validationErrors(telemetry, previousTelemetry) {
   const errors = [];
   const {
     load_t: loadT,
@@ -116,7 +115,7 @@ function validationErrors(telemetry, previousTelemetry, cwtT = 80) {
     }
   }
 
-  if (validPreviousTelemetryForRates(previousTelemetry, cwtT) && validTimestamp(telemetry.ts)) {
+  if (validPreviousTelemetryForRates(previousTelemetry) && validTimestamp(telemetry.ts)) {
     const seconds = (Date.parse(telemetry.ts) - Date.parse(previousTelemetry.ts)) / 1000;
     if (seconds > 0 && seconds <= 10) {
       if (finite(previousTelemetry.boom_length_m) && finite(boomLengthM) &&
@@ -140,9 +139,9 @@ function validationErrors(telemetry, previousTelemetry, cwtT = 80) {
     else if (finite(loadT) && loadT >= 0 &&
       Math.abs(
         pads.reduce((sum, value) => sum + value, 0) -
-        (machineMassT(cwtT) + loadT)
+        (KIT.MACHINE_MASS_T + loadT)
       ) > PAD_SUM_TOLERANCE) {
-      errors.push(`deployed pad reactions do not balance the ${machineMassT(cwtT)} t kit plus load`);
+      errors.push(`deployed pad reactions do not balance the ${KIT.MACHINE_MASS_T} t kit plus load`);
     }
   }
   return errors;
@@ -205,7 +204,7 @@ export function detectFailures(telemetry, previousTelemetry = null, cwtT = 80) {
   }
   const ts = telemetry.ts;
   const timestampOk = validTimestamp(ts);
-  const errors = timestampOk ? validationErrors(telemetry, previousTelemetry, cwtT) : ['telemetry timestamp must be a valid timestamp'];
+  const errors = timestampOk ? validationErrors(telemetry, previousTelemetry) : ['telemetry timestamp must be a valid timestamp'];
   const derived = calculateFailureInputs(telemetry, cwtT);
   const failures = [];
   const add = (type, triggerValue, limit, rule) => {

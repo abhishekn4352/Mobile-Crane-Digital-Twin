@@ -56,25 +56,30 @@ export {
 };
 
 // ------------------------------------------------------------
-// 40 t counterweight chart: same grid as 80 t, every value × 0.5
+// 40 t counterweight chart: same grid as 80 t, every capacity × 0.5
+//
+// ASSUMED, not manufacturer data — derived by scaling the 80 t
+// manufacturer chart (Grove GMK5250L-1, Manitowoc p/n 15016).
+// Use for planning only; never use on a real lift without a
+// manufacturer-issued 40 t counterweight capacity chart.
 // ------------------------------------------------------------
 export const CHART_40T = Object.freeze({
   model:  CHART.model,
-  source: CHART.source,
-  config: 'Full outriggers — 7.8 m spread | 40 t counterweight | 360° | EN 13000 (capacity ×0.5)',
+  source: 'ASSUMED, not manufacturer data',
+  config: 'Full outriggers — 7.8 m spread | 40 t counterweight | 360° | ASSUMED, not manufacturer data',
   boomLengthsM: CHART.boomLengthsM,
   radiiM:       CHART.radiiM,
   capacityT:    CHART.capacityT.map(row => Object.freeze(row.map(v => v === null ? null : v * 0.5))),
 });
 
-/** Returns the load-chart object for a given counterweight tonnage. */
+/**
+ * Returns the load-chart object for a given counterweight tonnage.
+ * Throws RangeError for any tonnage that is not 40 or 80.
+ */
 export function chartFor(cwtT) {
-  return cwtT === 40 ? CHART_40T : CHART;
-}
-
-/** Total machine mass (t) for a given counterweight tonnage. */
-export function machineMassT(cwtT) {
-  return KIT.CARRIER_MASS_T + KIT.SUPERSTRUCTURE_MASS_T + cwtT + KIT.BOOM_MASS_T;
+  if (cwtT === 80) return CHART;
+  if (cwtT === 40) return CHART_40T;
+  throw new RangeError(`chartFor: unsupported counterweight ${cwtT} t — only 40 and 80 are valid`);
 }
 
 
@@ -111,6 +116,18 @@ export const KIT = Object.freeze({
   PAD_NEAR_LIFT_T: 5,
   WARN_MARGIN_M: DEFAULT_WARN_MARGIN_M,
 });
+
+/**
+ * Total mass of the crane without hook load for a given counterweight tonnage.
+ * 45 t carrier + 35 t superstructure + 10 t boom + cwtT.
+ * 80 t cwt -> 170 t; 40 t cwt -> 130 t.
+ */
+export function machineMassT(cwtT = KIT.COUNTERWEIGHT_MASS_T) {
+  if (cwtT !== 80 && cwtT !== 40) {
+    throw new RangeError(`machineMassT: unsupported counterweight ${cwtT} t — only 40 and 80 are valid`);
+  }
+  return KIT.CARRIER_MASS_T + KIT.SUPERSTRUCTURE_MASS_T + KIT.BOOM_MASS_T + cwtT;
+}
 
 const isNum = value => Number.isFinite(value);
 
@@ -232,15 +249,16 @@ export function capacityFor(sample, cwtT = KIT.COUNTERWEIGHT_MASS_T) {
   const radiusM = sample.radius_m;
   const loadT = sample.load_t;
 
+  const chart = chartFor(cwtT);
   const capacityInputsValid = isNum(boomLengthM) && isNum(radiusM);
   const capacityT = capacityInputsValid
-    ? ratedCapacity(chartFor(cwtT), boomLengthM, radiusM)
+    ? ratedCapacity(chart, boomLengthM, radiusM)
     : null;
   const utilization = capacityT != null && isNum(loadT) && capacityT > 0
     ? loadT / capacityT
     : null;
 
-  return { capacityT, capacityInputsValid, utilization };
+  return { capacityT, capacityInputsValid, utilization, cwtT, chartSource: chart.source };
 }
 
 
