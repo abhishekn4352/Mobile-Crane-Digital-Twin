@@ -30,7 +30,7 @@ export const CHART = {
     /* boom 23.6 */ [111.0, 83.5,  68.0,  57.0,  45.0,  27.0,  null ],
     /* boom 38.0 */ [ 59.0, 58.5,  53.0,  47.5,  40.0,  30.5,  17.2 ],
     /* boom 52.4 */ [ null, null,  31.0,  31.0,  28.5,  23.5,  15.0 ],
-    /* boom 70.0 */ [ null, null,  null,  14.5,  14.5,  14.5,  12.4 ],
+    /* boom 70.0 */ [ null, null,  null,  14.5,  14.5,  14.5,  12.1 ],
   ],
 };
 
@@ -142,7 +142,7 @@ export const VALIDATION_CELLS = [
   { boomLengthM: 23.6, radiusM:  8, chartT:  83.5 },
   { boomLengthM: 38.0, radiusM: 12, chartT:  47.5 },
   { boomLengthM: 52.4, radiusM: 20, chartT:  23.5 },
-  { boomLengthM: 70.0, radiusM: 30, chartT:  12.4 },
+  { boomLengthM: 70.0, radiusM: 30, chartT:  12.1 },
 
   // B — Interpolated (midpoints between known cells — hand-check these on paper!)
   // boom=30.8m (midpoint 23.6–38.0), radius=10m
