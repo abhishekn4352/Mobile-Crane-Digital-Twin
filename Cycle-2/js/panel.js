@@ -1,6 +1,10 @@
 import { CHART, ratedCapacity, radiusFromAngle } from './loadchart.js';
 import { stabilityVerdict, loadGroundPosition, outriggerPolygonForSpread, combinedCoG } from './stability.js';
 
+// Source: Grove GMK5250L-1 manufacturer load-chart PDF, page 13 "Overview" -
+// full outrigger spread printed as "8,95 x 7,8 m" (= 8.95 x 7.8 m).
+// PDF: https://www.manitowoc.com/media/15016/download
+// Copy of the page: mobile-starter-kit.zip -> reference/page13-outrigger-spread.png
 const OUTRIGGER_SPREAD_X = 8.95;
 const OUTRIGGER_SPREAD_Z = 7.8;
 const MACHINE_MASS_T = 72;
