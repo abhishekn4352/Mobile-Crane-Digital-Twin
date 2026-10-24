@@ -23,7 +23,7 @@
 //      radius = L*cos(angle) + 0.8 (the kit radius formula)
 //      from the slew axis. Before: about 1.5 m short.
 //   6. Outrigger pads placed on the support-polygon corners
-//      (+-3.9 m along the carrier, +-4.45 m sideways by default),
+//      (+-3.9 m along the carrier, +-4.475 m sideways by default),
 //      with the slew axis at the world origin, the same frame as
 //      stability.js. Before: 7.6 x 6.6 m, off-centre. A middle
 //      beam section was added so the beam stays connected.
@@ -46,6 +46,8 @@
 // Calibration constants
 // ------------------------------------------------------------
 
+import { SAFETY_LIMITS } from './craneModel.js';
+
 export const BOOM_SCALE = 3;
 export const BOOM_PIVOT_X_M = -0.05;
 
@@ -55,10 +57,10 @@ export const BOOM_STROKE_M = BOOM_SCALE * 10;              // 30 m of telescopin
 export const BOOM_L_MAX_M = BOOM_L_MIN_M + BOOM_STROKE_M;  // 53.35 m, fully extended
 
 export const BOOM_ANGLE_MIN_DEG = 5;
-export const BOOM_ANGLE_MAX_DEG = 85;
+export const BOOM_ANGLE_MAX_DEG = SAFETY_LIMITS.angleMaxDeg;
 
 export const DEFAULT_PAD_HALF_X_M = 3.9;    // kit pads: x = +-3.9
-export const DEFAULT_PAD_HALF_Z_M = 4.45;   // kit pads: z = +-4.45
+export const DEFAULT_PAD_HALF_Z_M = 4.475;  // kit pads: z = +-4.475
 
 const SLEW_AXIS_LOCAL_X = -1.4;             // slew axis inside the carrier frame of the model
 const BOOM_PIVOT_Y = 1.95;                  // boom pivot height above the slew deck (model units)

@@ -1,5 +1,17 @@
 # Cycle 3 — Mobile Crane Digital Twin
 
+## Consolidated Real vs Faked and source-verification status
+
+| Area | Source or implementation | Status |
+|---|---|---|
+| Recorded telemetry | `data/mobile-telemetry-2026-09-16.csv` | Real recording; pad reactions retain the legacy 8.9 m Z fixture |
+| Load chart | Grove GMK5250L-1 manufacturer PDF, page 17, [official Manitowoc PDF](https://www.manitowoc.com/media/15016/download) | The checked 70 m / 30 m cell is verified as 12.1 t; other cells are not all independently verified |
+| Outrigger geometry | Manufacturer PDF, page 13; `js/craneModel.js` | Verified: X = 7.8 m, Z = 8.95 m; pads X ±3.9 m, Z ±4.475 m |
+| Stability, pad reactions, alarms, data quality | Cycle 3 model and detector rules | Computed from the current implementation and tested |
+| Manual controls and wind sway | Cycle 3 UI assumptions | Simulated or visual-only; not manufacturer telemetry |
+| Frozen-sensor detection | `createFrozenSensorTracker()` in `js/dataQuality.js` | Partial: safe opt-in state-machine helper exists, but production detection remains disabled pending verified mapping and duration |
+| Near-lift-off threshold | `KIT.PAD_NEAR_LIFT_T` in `js/craneModel.js` | 5 t is retained as the existing kit/team rule; engineering and sensor-noise justification remains unresolved |
+
 ## Module 1 — Playback & Clock
 
 **Module Owner:** Ajit
@@ -127,21 +139,13 @@ Exported API:
 | `clock.onUpdate(sample, clock)` callback | Module 4 re-render trigger |
 | `rows.fileOrder` | Module 4 `dataQuality.js` clock-fault scan |
 
-### 7. Real vs Faked
+### 7. Module 1 source notes
 
-| Feature | Source | Status |
-|---|---|---|
-| Telemetry timestamps (`ts`) | CSV column — ISO 8601 strings | **Real** |
-| Load, boom length / angle, radius, slew | CSV numeric columns | **Real** |
-| Outrigger state | CSV string column | **Real** |
-| Pad reactions (FL, FR, RL, RR) | CSV numeric columns | **Real** |
-| Hydraulic pressure, wind speed | CSV numeric columns | **Real** |
-| `lmi_pct` | CSV numeric column; blank when chart has no capacity | **Real** — blank correctly stored as `NaN` |
-| `status_word` | CSV numeric column | **Real** — device bitmask |
-| Clock advance interval | Actual `ts` difference between consecutive rows | **Real** — ts-driven, not assumed 1 s |
-| File-order glitch detection | `.fileOrder` property on the parsed array | **Real** — preserves the true file sequence |
-| Playback speed multipliers (1×–100×) | Wall-clock scaling of simulated time | **Scaled** — real data, compressed time |
-| MANUAL mode sample | Constructed from UI slider values by Module 4 | **Simulated** — not from the recording |
+Telemetry fields and status words are read from the recording. Playback uses
+the recorded timestamps and preserves file order for clock-fault analysis;
+playback-rate scaling and MANUAL samples are simulated UI behavior. The
+consolidated Real vs Faked and source-verification table at the top is the
+authoritative summary for these classifications.
 
 ---
 
@@ -200,6 +204,23 @@ calculations rather than duplicating those calculations.
 
 ### Status bits and data quality
 
+- The shared `statusBitSet()` helper in `js/craneModel.js` is the only status-word decoder.
+  The detector and panel use it for the existing device bits. Bits 0–3 are verified
+  only as a coarse motion-active group for the outrigger-deployment rule; the
+  repository does not identify which bit belongs to boom telescope, luff, slew,
+  hoist, or another sensor.
+- Frozen-sensor detection is **partially implemented, not enabled in production**.
+  `createFrozenSensorTracker()` accepts an explicit bit-to-field mapping and
+  duration, then safely resets on inactive motion, value changes, invalid values,
+  invalid/duplicate timestamps, and gaps, and emits one `FROZEN_SENSOR` issue per
+  continuing candidate. It has no defaults, so it cannot silently apply an
+  unapproved mapping or threshold.
+- The supplied CSV contains status values and event labels but no authoritative
+  mapping from bits 0–3 to sensor fields and no approved frozen interval.
+  Existing telemetry does not prove that unchanged values during an active bit
+  are faulty rather than rounded, quantized, or legitimately held. Mentor
+  approval is required before wiring this helper into `assessSample()` or
+  `detectFailures()`.
 - Status word bit 7 produces `DEVICE_OVERLOAD` when set and no calculated
   `OVERLOAD` is already present.
 - Status word bit 8, or computed utilization from 90% up to but below
@@ -240,28 +261,19 @@ The following tests have been run:
 - `node Cycle-3/js/test_telemetry.mjs`
   - Input validation and telemetry acceptance checks pass.
 - `node Cycle-3/js/test_craneModel.mjs`
-  - **83 passed, 0 failed**.
+  - **86 passed, 0 failed**.
 - `node Cycle-3/js/test_playback_failure_integration.mjs`
   - Playback sample delivery, overload, pressure-loss, stability
     suppression, parked-crane, and invalid-row checks pass.
 - `node Cycle-3/js/test_playbackClock.mjs`
-  - **63 passed, 0 failed**.
+  - **74 passed, 0 failed**.
 
-## 6. Real vs Faked
+## 6. Module 2 source notes
 
-| Feature | Source | Status/Notes |
-|---|---|---|
-| Load, boom length, boom angle | Cycle 3 telemetry CSV | Recorded telemetry |
-| Radius, outrigger state, pad reactions | Cycle 3 telemetry CSV | Recorded telemetry |
-| Hydraulic pressure, wind, device LMI | Cycle 3 telemetry CSV | Recorded telemetry |
-| Status bits | Cycle 3 telemetry CSV | Recorded telemetry |
-| Rated capacity | `craneModel.js` | Calculated/looked up by software |
-| Computed utilization | `craneModel.js` | Calculated by software |
-| Expected hydraulic pressure | `failureDetector.js` | Calculated by software |
-| Geometry validation | Failure Detector/shared radius model | Calculated validation result |
-| Stability result | `craneModel.js` shared kit model | Calculated by software |
-| Alarm classifications | `failureDetector.js` | Calculated from recorded and derived values |
-| Visual/simulated behavior | Other modules/UI | No additional simulated telemetry is claimed by Module 2 |
+The detector consumes recorded telemetry and shared Module 3 calculations.
+It classifies overload, stability, pad, hydraulic, deployment, device, and
+data-quality conditions; it does not create additional simulated telemetry.
+The consolidated table at the top is the single Real vs Faked summary.
 
 ## 7. Faults Found in Telemetry Recording
 
@@ -393,7 +405,7 @@ If the operating condition is not permitted by the load chart, the module return
 
 The blank device LMI on those two rows is a reporting artefact, not a chart restriction. Over the whole 39,301-row recording the device and our chart agree on *permitted* in 39,189 rows and on *not permitted* in 109 rows, and disagree in exactly **2** rows — 12:18:00 and 12:19:50, both at exactly r = 10.00 m with load 0. The device blanks its LMI for the whole excursion 12:18:00 → 12:19:50 (111 rows), which drives in from boom 45,60 m / r 10,00 m to boom 52,40 m / r 8,00 m and back out; the two permitted boundary rows are blanked together with the 109 genuinely not-permitted rows. The only window the PDF also refuses is 12:18:40 – 12:19:10 (31 rows, boom 52,40 m, r < 10 m), and it raises `NOT_PERMITTED` (F5) as intended.
 
-**Item 2 — 70 m boom / 30 m radius.** The PDF gives **12.1 t**, our table had 12.4 t. The number sits in the `70,0 m` column of the `30,0 m` radius row (12,3 t at 66,9 m, 11,4 t at 32 m), so 12,1 is unambiguous. The table cell and its validation cell were corrected **12.4 t → 12.1 t** — the old value was 0.3 t (2.5 %) optimistic, which is the dangerous direction for a rated capacity. No alarm changes: the only boom-70 row in the recording is the impossible 15:00 row, which is outside the chart radius range anyway. After the correction all **35** cells of our table match the PDF.
+**Item 2 — 70 m boom / 30 m radius.** The PDF gives **12.1 t**, our table had 12.4 t. The number sits in the `70,0 m` column of the `30,0 m` radius row (12,3 t at 66,9 m, 11,4 t at 32 m), so 12,1 is unambiguous. The table cell and its validation cell were corrected **12.4 t → 12.1 t** — the old value was 0.3 t (2.5 %) optimistic, which is the dangerous direction for a rated capacity. No alarm changes: the only boom-70 row in the recording is the impossible 15:00 row, which is outside the chart radius range anyway. Only the checked cell is claimed as verified; remaining cells require independent source review.
 
 Two honest limitations of the 5 × 7 table, both *conservative* (they can only under-state capacity, never over-state it):
 
@@ -550,31 +562,14 @@ No duplicate load-chart lookup, interpolation, outrigger geometry, Centre of Gra
 
 This is enforced, not just intended. `failureDetector.js` imports `KIT`, `capacityFor`, `stabilityFor`, `padReactionsFor` and `radiusFromAngle` from `./craneModel.js`; it no longer imports Cycle 2 directly and no longer keeps its own centre-of-gravity, chart or outrigger-spread copy. Test 7 in `test_craneModel.mjs` fails if any Cycle 3 module reaches around Module 3.
 
-### 11. Real vs Faked
+### 11. Module 3 source notes
 
-| Item | Source / Implementation | Status |
-| ------------------------- | ------------------------------------------------ | ---------------------- |
-| Rated capacity | Grove GMK5250L-1 chart in `Cycle-2/js/loadchart.js`, read through `capacityFor()` | Computed, tested |
-| Manufacturer PDF cross-check | All 35 chart cells read from page 17 of `manitowoc.com/media/15016/download` (7,8 m / 80 t / 360° / EN 13000) | 34/35 matched; 1 cell corrected 12.4 → 12.1 t |
-| Load-chart lookup | `ratedCapacity()` bilinear lookup, exact cells verified to 0 % | Computed, tested |
-| Load-chart interpolation | `ratedCapacity()` between chart rows/columns (60.5 t and 38.1 t midpoints) | Computed, tested |
-| Null / not-permitted cell | `capacityT = null`, `utilization = null` (e.g. 52.4 m / 8 m, row `F5`) | Computed, tested |
-| Outrigger configuration | Full outriggers, 7.8 m spread — the only configuration in the supplied chart and in the recording | Kit configuration |
-| On-rubber capacity | No on-rubber chart exists in the kit, so no number is invented; the module keeps returning the full-outrigger chart value | Not modelled |
-| Working radius | Telemetry `radius_m`, cross-checked against `radiusFromAngle(L, θ, 0.8)` on all 39,301 rows (3 impossible rows excepted) | Data-driven + tested |
-| Combined CoG | `kitCombinedCoG()`: 45 + 35 t at the slew centre, 80 t counterweight at 3.5 m on `slew + 180°`, 10 t boom at half the horizontal reach, hook load at the radius | Computed, tested |
-| Outrigger support polygon | `supportPolygon()` from `KIT.PAD_POSITIONS` (±3.9, ±4.45 m) | Computed, tested |
-| Pad reactions | `padReactionsFor()`, rigid-body plane formula; matches the recorded pads to **0.02427 t** worst case on 31,804 of 31,860 `DEPLOYED` rows | Computed, tested against the recording |
-| Stability verdict | Cycle 2 `stabilityVerdict()` re-exported; `ok` / `warn` / `tipping` against the polygon | Computed, tested |
-| Utilisation | `load / capacityFor().capacityT` (52 t / 47.5 t = 109.47 % at 09:00) | Computed, tested |
-| Kit masses, tail radius, pivot offset, pad near-lift threshold | `KIT` constants from `README-for-students.md` §2 — synthetic kit assumptions, not manufacturer figures | Kit constants |
-| Warn margin 1.5 m | Cycle 2 starter-kit default (`DEFAULT_WARN_MARGIN_M`) | Team threshold |
-| Chart tests | `js/test_craneModel.mjs` sections 1–2 | Tested (83 assertions) |
-| Stability tests | `js/test_craneModel.mjs` sections 3–5 | Tested (83 assertions) |
-| Single-source check | `js/test_craneModel.mjs` section 6 | Tested |
-| Overload decision | Module 2 detector using Module 3 `capacityT` / `utilization` | Integrated |
-| Stability decision | Module 2 detector using Module 3 `stability` / `cog` | Integrated |
-| On-rubber stability / A2B / wind model | Not part of Module 3 | Not modelled |
+The chart, stability, geometry, pad-reaction, and interpolation details are
+implemented and tested in `js/craneModel.js` and the Cycle 2 primitives it
+re-exports. The checked manufacturer cells and all unverified-source caveats
+are listed in the consolidated table at the top; this section retains the
+technical implementation and integration explanations without repeating the
+classification table.
 
 ### 12. Cycle 3 Integration Status
 
@@ -586,8 +581,8 @@ This is enforced, not just intended. `failureDetector.js` imports `KIT`, `capaci
 | Kit centre of gravity | `kitCombinedCoG()` | Done, tested against the recording |
 | Pad reactions | `padReactionsFor()` | Done, tested against the recording |
 | Stability geometry + verdict | `supportPolygon()`, re-exported `stabilityVerdict()` | Done, tested |
-| Chart tests | `js/test_craneModel.mjs` | 83 passed / 0 failed |
-| Stability tests | `js/test_craneModel.mjs` | 83 passed / 0 failed |
+| Chart tests | `js/test_craneModel.mjs` | 86 passed / 0 failed |
+| Stability tests | `js/test_craneModel.mjs` | 86 passed / 0 failed |
 | Telemetry-driven inputs | Module 1 — Playback & Clock | Done — `currentTelemetrySample` → `capacityFor()` / `stabilityFor()` |
 | Failure Detector integration | Module 2 — Failure Detector | Done — uses `capacityFor()`, `stabilityFor()`, `padReactionsFor()` from `./craneModel.js` |
 | Sensor Panel integration | Module 4 — Sensor Panel & Alarm UI | Done — panel interface is `KIT`, `radiusFromAngle()`, `supportPolygon()`, `loadGroundPosition()` |
@@ -613,6 +608,9 @@ The Sensor Panel & Alarm UI module shows the state of the crane and its alarms, 
 - A **LIVE / MANUAL switch** in the control dock, and a **LIVE (telemetry) / MANUAL (override)** badge that is always visible. In LIVE the dock shows only the playback controls (play / pause, speed, position, jump) and no sliders. In MANUAL it shows only the sliders and no playback controls; the recording is paused, the badge turns amber and alarms are labelled SIMULATED. The LIVE button (or "Return to LIVE" in the header) goes back and carries on from the same row.
 - A **data-quality** badge: `OK` / `STALE` (dropout or repeated timestamp) / `BAD DATA` (an impossible row). BAD DATA and STALE are shown as data problems, never as crane failures.
 - **NO DATA · dropout in progress**: the clock follows the CSV's own `ts`, so inside the 15:20:00–15:24:59 gap it publishes nothing. The panel then says NO DATA, counts the seconds up to the next sample, and greys the sensor values (they are the last ones received).
+- Frozen-sensor state is not reported by the live panel until the mentor
+  confirms the motion-bit mapping and duration; enabling it prematurely could
+  turn valid quantized or plateaued readings into false data-quality alarms.
 - An **alarm list**: one latched entry per alarm episode, with the alarm type, the triggering value, the rule that fired and the **first timestamp** at which it became true. Active alarms are highlighted, cleared ones greyed.
 - Device chips from `status_word` and wind: WIND ALERT, LMI BYPASS, LMI PRE-WARN, A2B.
 - **NOT PERMITTED** instead of a number when the chart has no capacity.
@@ -667,24 +665,13 @@ node Cycle-3/js/test_crane3d.mjs           # 51 checks
 
 Whole-day alarm log (23 entries; the two single-row LMI divergence entries at 12:18:00 and 12:19:50 are where the device is blank but our chart still gives 41.4 t, see the fault list, A6. With the old `parseCSV`, which read a blank as 0, the log had 21 entries): improper deployment 07:03:00 · overload 09:00:00 · overload + LMI divergence 09:50:00 · near lift-off 10:25:20 · overload 11:00:00 · hydraulic loss 11:00:01 · NOT PERMITTED 12:18:40 · wind 12:30:00 · LMI bypass 14:00:00 · pre-warning ×4 (14:09:58, 14:19:58, 14:39:58, 14:49:58) · BAD DATA ×4 (14:30:00, 15:00:00, 15:30:00, 17:00:00) · dropout 15:25:00 · repeated timestamp 15:59:49 · dropout 16:00:02.
 
-### 6. Real vs Faked
+### 6. Module 4 source notes
 
-| Feature | Source | Status |
-|---|---|---|
-| Load, boom length / angle, radius, slew | CSV row (Module 1) | **Real** |
-| Outrigger state, pad reactions | CSV row | **Real** |
-| Hydraulic pressure, wind speed | CSV row | **Real** |
-| Rated capacity, utilisation | Cycle-2 chart via the detector | **Real** (the chart is ours; one cell, 70 m / 30 m, is unchecked against the PDF) |
-| Stability verdict | Cycle-2 stability via the detector, kit centre of gravity | **Real** |
-| Alarm list | Module 2 detector | **Real** |
-| First timestamps, latching | computed from the recording | **Real** |
-| Data quality (STALE, BAD DATA) | rules on the recording | **Real** (thresholds are our own: 2 s gap, 0.1 m radius, 0.5 m hook, 0–85° angle) |
-| Device chips (bypass, pre-warn, A2B) | `status_word` | **Real** |
-| MANUAL values | slider input | **Simulated.** Radius and hook height come from the boom formulas; pressure from the kit formula; pads, device LMI and status word are not simulated |
-| 3D crane geometry, boom, slew, outriggers | drawn from the sample | **Visual only.** Proportions are approximate, not the Grove drawing |
-| Hook / load position | drawn from the sample | **Visual only.** The hook hangs at the boom tip (the kit does not model rope pay-out) |
-| **Wind sway of the load** | wind speed is real; the lean angle, swing period and direction are **assumed** | **Faked.** Lean grows with wind² (5° at the 36 km/h alert, 7.8° at 45 km/h, capped at 12°), a swing of 60 % of the lean around it with a 5 s period, a smaller cross-wind swing, direction fixed. It is a picture of "wind is strong", not a calculation of wind load |
-| Pads in MANUAL | none | **Not simulated** (shown as "—") |
+The panel displays recorded telemetry and detector results. MANUAL controls,
+the approximate 3D proportions, hook visualization, and wind sway remain
+simulated or visual-only; the panel does not create additional telemetry.
+The consolidated Real vs Faked and source-verification table at the top is
+the authoritative classification summary.
 
 ### 7. Known limits
 

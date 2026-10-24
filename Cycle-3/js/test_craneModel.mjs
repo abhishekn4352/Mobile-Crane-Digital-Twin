@@ -152,6 +152,33 @@ ok(`all other rows match within 0.01 m (worst ${worstRadius.error.toFixed(5)} m)
 
 console.log('\n3. Kit pad model vs recorded pad reactions (DEPLOYED rows)');
 
+check('verified X spread is 7.8 m', KIT.OUTRIGGER_SPREAD_X, 7.8);
+check('verified Z spread is 8.95 m', KIT.OUTRIGGER_SPREAD_Z, 8.95);
+check('verified pad coordinates are mapped X ±3.9 m and Z ±4.475 m',
+  JSON.stringify(KIT.PAD_POSITIONS),
+  JSON.stringify({
+    fl: { x: -3.9, z: -4.475 }, fr: { x: 3.9, z: -4.475 },
+    rl: { x: -3.9, z: 4.475 }, rr: { x: 3.9, z: 4.475 },
+  }));
+
+// The recording predates the verified 8.95 m Z spread. Keep that fixture
+// unchanged and use the same rigid-body formula with its legacy half-span.
+function legacyPadReactionsFor(sample) {
+  const cog = kitCombinedCoG(sample);
+  if (cog == null) return null;
+  const positions = [
+    ['fl', -3.9, -4.45], ['fr', 3.9, -4.45],
+    ['rl', -3.9, 4.45], ['rr', 3.9, 4.45],
+  ];
+  const sumX2 = positions.reduce((sum, [, x]) => sum + x * x, 0);
+  const sumZ2 = positions.reduce((sum, [, , z]) => sum + z * z, 0);
+  const raw = positions.map(([name, x, z]) => [
+    name,
+    cog.totalT / 4 + (cog.totalT * cog.x * x) / sumX2 + (cog.totalT * cog.z * z) / sumZ2,
+  ]);
+  return Object.fromEntries(raw.map(([name, value]) => [name.toUpperCase(), Math.max(0, value)]));
+}
+
 const KNOWN_EXCEPTIONS = new Set([
   '2026-09-16T14:30:00+05:30',
   '2026-09-16T15:30:00+05:30',
@@ -175,7 +202,7 @@ for (const row of rows) {
   if (![load, radius, slew, ...recorded].every(Number.isFinite)) continue;
   deployedRows++;
 
-  const model = padReactionsFor(row);
+  const model = legacyPadReactionsFor(row);
   const keys = ['FL', 'FR', 'RL', 'RR'];
   let rowWorst = 0;
   for (let i = 0; i < keys.length; i++) {
@@ -214,10 +241,10 @@ ok(`every other row balances 170 t + load (worst ${worstSum.toFixed(4)} t)`,
 
 const idle = { load_t: 0, radius_m: 14, slew_deg: 0, outrigger_state: 'DEPLOYED' };
 const idlePads = padReactionsFor(idle);
-approx('idle pads FL = 55.96 t', idlePads.FL, 55.96, 0.01);
-approx('idle pads FR = 29.04 t', idlePads.FR, 29.04, 0.01);
-approx('idle pads RL = 55.96 t', idlePads.RL, 55.96, 0.01);
-approx('idle pads RR = 29.04 t', idlePads.RR, 29.04, 0.01);
+approx('current geometry idle pads FL = 55.96 t', idlePads.FL, 55.96, 0.01);
+approx('current geometry idle pads FR = 29.04 t', idlePads.FR, 29.04, 0.01);
+approx('current geometry idle pads RL = 55.96 t', idlePads.RL, 55.96, 0.01);
+approx('current geometry idle pads RR = 29.04 t', idlePads.RR, 29.04, 0.01);
 
 const retracted = padReactionsFor({ ...idle, outrigger_state: 'RETRACTED' });
 check('retracted -> all pads 0', JSON.stringify(retracted), JSON.stringify({ FL: 0, FR: 0, RL: 0, RR: 0, deployed: false, computed: true }));

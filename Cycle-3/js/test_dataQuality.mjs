@@ -13,7 +13,7 @@ import { dirname, join } from 'path';
 import { parseCSV } from './playbackClock.js';
 import {
   QUALITY, LIMITS, assessSample, staticIssues, sequenceIssues,
-  expectedRadiusM, expectedHookHeightM, scanClockFaults,
+  expectedRadiusM, expectedHookHeightM, scanClockFaults, createFrozenSensorTracker,
 } from './dataQuality.js';
 
 let passed = 0, failed = 0;
@@ -104,6 +104,63 @@ check('slew faster than 3 deg/s is flagged',
 check('pad sum is only judged while DEPLOYED (pads are 0 while DEPLOYING)',
   staticIssues({ ...good, outrigger_state: 'DEPLOYING', pad_fl_t: 0, pad_fr_t: 0, pad_rl_t: 0, pad_rr_t: 0 }).length === 0);
 check('limits are frozen (cannot be changed by accident)', Object.isFrozen(LIMITS) && Object.isFrozen(QUALITY));
+
+
+console.log('\n=== OPT-IN FROZEN-SENSOR HELPER (SYNTHETIC CONTRACT TESTS) ===');
+// These tests exercise the generic state machine only. The bit-to-field mapping
+// and 3-second interval are synthetic inputs, not approved production settings.
+const frozenBase = {
+  ts: '2026-09-16T18:00:00+05:30',
+  status_word: 1,
+  boom_length_m: 32,
+};
+const tracker = createFrozenSensorTracker({
+  mappings: [{ field: 'boom_length_m', bit: 0 }],
+  durationS: 3,
+});
+check('active unchanged sensor does not report before the configured duration',
+  tracker.update(frozenBase).length === 0 &&
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:01+05:30' }).length === 0 &&
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30' }).length === 0);
+check('active unchanged sensor reports once at the configured duration',
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:03+05:30' })[0]?.code === 'FROZEN_SENSOR');
+check('continuing freeze does not duplicate the issue',
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:04+05:30' }).length === 0);
+check('inactive motion bit does not report and resets the candidate',
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:05+05:30', status_word: 0 }).length === 0 &&
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:06+05:30' }).length === 0);
+check('sensor change during movement resets the candidate',
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:07+05:30', boom_length_m: 32.1 }).length === 0 &&
+  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:08+05:30', boom_length_m: 32.1 }).length === 0);
+check('movement stopping before the duration cannot report a freeze', (() => {
+  const t = createFrozenSensorTracker({ mappings: [{ field: 'boom_length_m', bit: 0 }], durationS: 3 });
+  t.update(frozenBase);
+  t.update({ ...frozenBase, ts: '2026-09-16T18:00:01+05:30' });
+  return t.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30', status_word: 0 }).length === 0;
+})());
+check('timestamp gap resets the candidate', (() => {
+  const t = createFrozenSensorTracker({ mappings: [{ field: 'boom_length_m', bit: 0 }], durationS: 3 });
+  t.update(frozenBase);
+  return t.update({ ...frozenBase, ts: '2026-09-16T18:00:04+05:30' }).length === 0;
+})());
+check('duplicate timestamp resets the candidate', (() => {
+  const t = createFrozenSensorTracker({ mappings: [{ field: 'boom_length_m', bit: 0 }], durationS: 3 });
+  t.update(frozenBase);
+  return t.update(frozenBase).length === 0;
+})());
+check('missing or invalid sensor values suspend detection', (() => {
+  const t = createFrozenSensorTracker({ mappings: [{ field: 'boom_length_m', bit: 0 }], durationS: 3 });
+  t.update(frozenBase);
+  return t.update({ ...frozenBase, ts: '2026-09-16T18:00:01+05:30', boom_length_m: NaN }).length === 0 &&
+    t.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30' }).length === 0;
+})());
+check('parked constant value does not report without an active motion bit', (() => {
+  const t = createFrozenSensorTracker({ mappings: [{ field: 'boom_length_m', bit: 0 }], durationS: 3 });
+  return t.update({ ...frozenBase, status_word: 0 }).length === 0 &&
+    t.update({ ...frozenBase, ts: '2026-09-16T18:00:01+05:30', status_word: 0 }).length === 0 &&
+    t.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30', status_word: 0 }).length === 0 &&
+    t.update({ ...frozenBase, ts: '2026-09-16T18:00:03+05:30', status_word: 0 }).length === 0;
+})());
 
 
 console.log('\n==============================================');

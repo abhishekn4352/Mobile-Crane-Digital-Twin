@@ -25,7 +25,7 @@
 //     first timestamp at which it became true, however the playback got there.
 // ============================================================
 
-import { KIT } from './craneModel.js';            // Module 3: kit constants live there only
+import { KIT, statusBitSet } from './craneModel.js';            // Module 3: kit constants live there only
 import { QUALITY, LIMITS, assessSample, staticIssues } from './dataQuality.js';
 import { expectedRadiusM, expectedHookHeightM } from './dataQuality.js';
 
@@ -58,7 +58,7 @@ const STATUS_BIT_OF = { LMI_BYPASS: 12, DEVICE_OVERLOAD: 7, A2B_ALERT: 9 };
 const fin = Number.isFinite;
 const fmt = (n, d = 1) => (fin(n) ? n.toFixed(d) : '—');
 const hms = (ts) => (typeof ts === 'string' && ts.length >= 19 ? ts.slice(11, 19) : '--:--:--');
-export const hasBit = (word, bit) => fin(word) && ((word >> bit) & 1) === 1;
+export const hasBit = statusBitSet;
 
 
 // ------------------------------------------------------------

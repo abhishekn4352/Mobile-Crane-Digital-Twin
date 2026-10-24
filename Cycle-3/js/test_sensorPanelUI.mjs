@@ -278,8 +278,8 @@ console.log('\n=== DETECTOR INTEGRATION (what the panel hands to detectFailures)
   check('the row after the 15:00:00 glitch: the previous row is NOT passed', calls[0].prev === undefined);
   check('...so the recovery row is not blamed for the glitch', rec.quality.level === 'OK' && rec.raised.length === 0, JSON.stringify(rec.raised));
   const rawRate = detectFailures(rows[j], rows[j - 1]);
-  check('(the detector alone, given that previous row, would flag the recovery row)',
-    rawRate.status === 'INVALID_TELEMETRY' && /rate/.test(rawRate.errors.join()), JSON.stringify(rawRate.errors));
+  check('(the detector alone rejects the invalid previous row and does not blame recovery)',
+    rawRate.status !== 'INVALID_TELEMETRY' && rawRate.errors.length === 0, JSON.stringify(rawRate.errors));
 
   calls.length = 0;
   analyseSample(rows[idx('12:18:40')], rows[idx('12:18:40') - 1], spy);

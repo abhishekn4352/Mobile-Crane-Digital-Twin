@@ -1,6 +1,9 @@
 // Module 3 is the single source of truth for chart, kit, and stability math.
 import {
   KIT,
+  SAFETY_LIMITS,
+  expectedHookHeightM,
+  statusBitSet,
   capacityFor,
   stabilityFor,
   radiusFromAngle,
@@ -10,14 +13,9 @@ import {
 const PAD_NEAR_LIFT_T = KIT.PAD_NEAR_LIFT_T;
 const PAD_SUM_TOLERANCE = 3;
 
-const MOTION_MASK = 0x0f;
-const LMI_PREWARN_MASK = 1 << 8;
-const OVERLOAD_MASK = 1 << 7;
-const A2B_MASK = 1 << 9;
-const LMI_BYPASS_MASK = 1 << 12;
 
 const finite = value => Number.isFinite(value);
-const bitSet = (word, mask) => finite(word) && (word & mask) !== 0;
+const bitNumberSet = (word, bit) => statusBitSet(word, bit);
 const validTimestamp = ts =>
   typeof ts === 'string' && ts.trim() !== '' && Number.isFinite(Date.parse(ts));
 
@@ -44,14 +42,14 @@ function validPreviousTelemetryForRates(telemetry) {
   } = telemetry;
 
   if (![loadT, boomLengthM, boomAngleDeg, radiusM, slewDeg].every(finite)) return false;
-  if (loadT < 0 || boomAngleDeg < 0 || boomAngleDeg > 85) return false;
+  if (loadT < 0 || boomAngleDeg < SAFETY_LIMITS.angleMinDeg || boomAngleDeg > SAFETY_LIMITS.angleMaxDeg) return false;
 
   const expectedRadius = radiusFromAngle(boomLengthM, boomAngleDeg, KIT.PIVOT_OFFSET_M);
   if (Math.abs(radiusM - expectedRadius) > 1) return false;
 
   if (finite(telemetry.hook_height_m)) {
-    const expectedHeight = boomLengthM * Math.sin(boomAngleDeg * Math.PI / 180);
-    if (Math.abs(telemetry.hook_height_m - expectedHeight) > 1) return false;
+    const expectedHeight = expectedHookHeightM(boomLengthM, boomAngleDeg);
+    if (Math.abs(telemetry.hook_height_m - expectedHeight) > SAFETY_LIMITS.hookTolM) return false;
   }
 
   if (telemetry.outrigger_state === 'DEPLOYED') {
@@ -98,8 +96,8 @@ function validationErrors(telemetry, previousTelemetry) {
   }
 
   if (finite(loadT) && loadT < 0) errors.push('negative load is impossible');
-  if (finite(boomAngleDeg) && (boomAngleDeg < 0 || boomAngleDeg > 85)) {
-    errors.push('boom angle must be between 0 and 85 degrees');
+  if (finite(boomAngleDeg) && (boomAngleDeg < SAFETY_LIMITS.angleMinDeg || boomAngleDeg > SAFETY_LIMITS.angleMaxDeg)) {
+    errors.push(`boom angle must be between ${SAFETY_LIMITS.angleMinDeg} and ${SAFETY_LIMITS.angleMaxDeg} degrees`);
   }
 
   if (finite(boomLengthM) && finite(boomAngleDeg) && finite(radiusM)) {
@@ -109,8 +107,8 @@ function validationErrors(telemetry, previousTelemetry) {
     }
   }
   if (finite(boomLengthM) && finite(boomAngleDeg) && finite(hookHeightM)) {
-    const expectedHeight = boomLengthM * Math.sin(boomAngleDeg * Math.PI / 180);
-    if (Math.abs(hookHeightM - expectedHeight) > 1) {
+    const expectedHeight = expectedHookHeightM(boomLengthM, boomAngleDeg);
+    if (Math.abs(hookHeightM - expectedHeight) > SAFETY_LIMITS.hookTolM) {
       errors.push(`hook height ${hookHeightM} m is inconsistent with boom geometry (${expectedHeight.toFixed(2)} m)`);
     }
   }
@@ -119,16 +117,16 @@ function validationErrors(telemetry, previousTelemetry) {
     const seconds = (Date.parse(telemetry.ts) - Date.parse(previousTelemetry.ts)) / 1000;
     if (seconds > 0 && seconds <= 10) {
       if (finite(previousTelemetry.boom_length_m) && finite(boomLengthM) &&
-          Math.abs(boomLengthM - previousTelemetry.boom_length_m) / seconds > 0.3) {
-        errors.push('boom telescope rate exceeds 0.3 m/s');
+          Math.abs(boomLengthM - previousTelemetry.boom_length_m) / seconds > SAFETY_LIMITS.telescopeMps) {
+        errors.push(`boom telescope rate exceeds ${SAFETY_LIMITS.telescopeMps} m/s`);
       }
       if (finite(previousTelemetry.boom_angle_deg) && finite(boomAngleDeg) &&
           Math.abs(boomAngleDeg - previousTelemetry.boom_angle_deg) / seconds > 2) {
-        errors.push('luff rate exceeds 2 degrees/s');
+        errors.push(`luff rate exceeds ${SAFETY_LIMITS.luffDps} degrees/s`);
       }
       if (finite(previousTelemetry.slew_deg) && finite(slewDeg) &&
           signedAngleDelta(slewDeg, previousTelemetry.slew_deg) / seconds > 3) {
-        errors.push('slew rate exceeds 3 degrees/s');
+        errors.push(`slew rate exceeds ${SAFETY_LIMITS.slewDps} degrees/s`);
       }
     }
   }
@@ -227,7 +225,7 @@ export function detectFailures(telemetry, previousTelemetry = null) {
 
   const loadT = telemetry.load_t;
   const statusWord = telemetry.status_word;
-  const motionActive = bitSet(statusWord, MOTION_MASK);
+  const motionActive = [0, 1, 2, 3].some(bit => bitNumberSet(statusWord, bit));
   if ((motionActive || (finite(loadT) && loadT > 0)) && telemetry.outrigger_state !== 'DEPLOYED') {
     add('IMPROPER_OUTRIGGER_DEPLOYMENT', telemetry.outrigger_state, 'DEPLOYED when moving or carrying load',
       `motion bits 0-3 active (${statusWord}) or load ${loadT} t while outriggers are not DEPLOYED`);
@@ -265,16 +263,16 @@ export function detectFailures(telemetry, previousTelemetry = null) {
   if (finite(telemetry.wind_kmh) && telemetry.wind_kmh > 36) {
     add('WIND_ALERT', telemetry.wind_kmh, 36, 'wind speed exceeds 36 km/h');
   }
-  if (bitSet(statusWord, LMI_BYPASS_MASK)) add('LMI_BYPASS', statusWord, 'status bit 12 clear', 'status_word bit 12 reports LMI bypass');
+  if (bitNumberSet(statusWord, 12)) add('LMI_BYPASS', statusWord, 'status bit 12 clear', 'status_word bit 12 reports LMI bypass');
   if ((finite(derived.utilization) && derived.utilization >= 0.9 && derived.utilization < 1) ||
-      bitSet(statusWord, LMI_PREWARN_MASK)) {
+      bitNumberSet(statusWord, 8)) {
     add('LMI_PREWARNING', finite(derived.utilization) ? derived.utilization * 100 : statusWord, 90,
       'computed utilization is 90-100% or status bit 8 reports LMI pre-warning');
   }
-  if (bitSet(statusWord, OVERLOAD_MASK) && !failures.some(failure => failure.type === 'OVERLOAD')) {
+  if (bitNumberSet(statusWord, 7) && !failures.some(failure => failure.type === 'OVERLOAD')) {
     add('DEVICE_OVERLOAD', statusWord, 'status bit 7 clear', 'status_word bit 7 reports device overload');
   }
-  if (bitSet(statusWord, A2B_MASK)) add('A2B_ALERT', statusWord, 'status bit 9 clear', 'status_word bit 9 reports anti-two-block condition');
+  if (bitNumberSet(statusWord, 9)) add('A2B_ALERT', statusWord, 'status bit 9 clear', 'status_word bit 9 reports anti-two-block condition');
 
   return {
     timestamp: ts,

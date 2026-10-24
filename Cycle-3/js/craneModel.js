@@ -19,7 +19,7 @@
 //   counterweight 80 t, 3.5 m tail radius, at slew + 180°
 //   boom self-weight 10 t at half the horizontal reach
 //   hook load at the working radius
-//   pads at (±3.9, ±4.45) m, rigid-body plane reactions
+//   pads at (±3.9, ±4.475) m, rigid-body plane reactions
 // ============================================================
 
 import {
@@ -68,7 +68,7 @@ export const KIT = Object.freeze({
   PIVOT_OFFSET_M: 0.8,
   OUTRIGGER_LENGTH_M: 8.9,
   OUTRIGGER_SPREAD_X: 7.8,
-  OUTRIGGER_SPREAD_Z: 8.9,
+  OUTRIGGER_SPREAD_Z: 8.95,
 
   CARRIER_MASS_T: 45,
   SUPERSTRUCTURE_MASS_T: 35,
@@ -79,16 +79,33 @@ export const KIT = Object.freeze({
   TAIL_RADIUS_M: 3.5,
 
   PAD_POSITIONS: Object.freeze({
-    fl: Object.freeze({ x: -3.9, z: -4.45 }),
-    fr: Object.freeze({ x: 3.9, z: -4.45 }),
-    rl: Object.freeze({ x: -3.9, z: 4.45 }),
-    rr: Object.freeze({ x: 3.9, z: 4.45 }),
+    fl: Object.freeze({ x: -3.9, z: -4.475 }),
+    fr: Object.freeze({ x: 3.9, z: -4.475 }),
+    rl: Object.freeze({ x: -3.9, z: 4.475 }),
+    rr: Object.freeze({ x: 3.9, z: 4.475 }),
   }),
 
   PAD_ORDER: Object.freeze(['fl', 'fr', 'rl', 'rr']),
   PAD_NEAR_LIFT_T: 5,
   WARN_MARGIN_M: DEFAULT_WARN_MARGIN_M,
 });
+
+export const SAFETY_LIMITS = Object.freeze({
+  hookMinM: 6,
+  hookTolM: 0.5,
+  angleMinDeg: 0,
+  angleMaxDeg: 85,
+  telescopeMps: 0.3,
+  luffDps: 2,
+  slewDps: 3,
+});
+
+export const expectedHookHeightM = (lengthM, angleDeg) =>
+  Math.max(SAFETY_LIMITS.hookMinM, lengthM * Math.sin((angleDeg * Math.PI) / 180));
+
+export const statusBitSet = (statusWord, bit) =>
+  Number.isFinite(statusWord) && Number.isInteger(bit) && bit >= 0
+  && (statusWord & (1 << bit)) !== 0;
 
 const isNum = value => Number.isFinite(value);
 

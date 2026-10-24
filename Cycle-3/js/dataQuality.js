@@ -18,7 +18,13 @@
 //   TEAM = our own choice, not from sir
 // ============================================================
 
-import { KIT, radiusFromAngle } from './craneModel.js';   // Module 3: the one place for kit numbers and the radius formula
+import {
+  KIT,
+  SAFETY_LIMITS,
+  expectedHookHeightM,
+  radiusFromAngle,
+  statusBitSet,
+} from './craneModel.js';   // Module 3: the one place for kit numbers and safety rules
 
 export const QUALITY = Object.freeze({
   OK: 'OK',
@@ -30,13 +36,13 @@ export const LIMITS = Object.freeze({
   gapS: 2,                 // TEAM: more than 2 s between samples = dropout (data is 1 Hz)
   pivotOffsetM: KIT.PIVOT_OFFSET_M,   // KIT: radius = L*cos(angle) + 0.8
   radiusTolM: 0.1,         // TEAM
-  hookTolM: 0.5,           // TEAM
-  hookMinM: 6,             // KIT: hook_height_m tracks boom-tip height, minimum 6 m
-  angleMinDeg: 0,          // TEAM: boom angle above horizontal
-  angleMaxDeg: 85,         // TEAM
-  telescopeMps: 0.3,       // KIT motion-rate limits
-  luffDps: 2,              // KIT
-  slewDps: 3,              // KIT
+  hookTolM: SAFETY_LIMITS.hookTolM,
+  hookMinM: SAFETY_LIMITS.hookMinM,
+  angleMinDeg: SAFETY_LIMITS.angleMinDeg,
+  angleMaxDeg: SAFETY_LIMITS.angleMaxDeg,
+  telescopeMps: SAFETY_LIMITS.telescopeMps,
+  luffDps: SAFETY_LIMITS.luffDps,
+  slewDps: SAFETY_LIMITS.slewDps,
   baseMassT: KIT.MACHINE_MASS_T,      // KIT: 45 carrier + 35 superstructure + 80 counterweight + 10 boom
   padSumTolT: 2,           // TEAM: sum of the four pads vs (170 t + hook load)
 });
@@ -50,12 +56,83 @@ const NUMERIC_CORE = [
 ];
 
 const toSec = (ts) => (typeof ts === 'string' ? Date.parse(ts) / 1000 : NaN);
-const rad = (d) => (d * Math.PI) / 180;
 const wrap180 = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 const fin = Number.isFinite;
 
 export const expectedRadiusM = (lengthM, angleDeg) => radiusFromAngle(lengthM, angleDeg, KIT.PIVOT_OFFSET_M);
-export const expectedHookHeightM = (lengthM, angleDeg) => Math.max(LIMITS.hookMinM, lengthM * Math.sin(rad(angleDeg)));
+export { expectedHookHeightM };
+
+/**
+ * Build an opt-in frozen-sensor tracker.
+ *
+ * This helper intentionally has no production mapping or default duration:
+ * the supplied telemetry and project documents do not establish which
+ * motion bit owns which sensor, or an approved freeze interval. Callers must
+ * provide both before this can be enabled for a real crane.
+ */
+export function createFrozenSensorTracker({ mappings, durationS } = {}) {
+  if (!Array.isArray(mappings) || mappings.length === 0 ||
+      !Number.isFinite(durationS) || durationS <= 0) {
+    throw new TypeError('frozen-sensor mappings and a positive durationS are required');
+  }
+  for (const mapping of mappings) {
+    if (!mapping || typeof mapping.field !== 'string' ||
+        !Number.isInteger(mapping.bit) || mapping.bit < 0) {
+      throw new TypeError('each frozen-sensor mapping needs a field and non-negative bit');
+    }
+  }
+
+  const active = new Map();
+  let previousTimestamp = null;
+
+  const reset = () => {
+    active.clear();
+    previousTimestamp = null;
+  };
+
+  const update = (sample) => {
+    const timestamp = sample && typeof sample.ts === 'string' ? Date.parse(sample.ts) : NaN;
+    if (!sample || !Number.isFinite(timestamp) ||
+        (previousTimestamp !== null &&
+         (timestamp <= previousTimestamp || (timestamp - previousTimestamp) / 1000 > LIMITS.gapS))) {
+      reset();
+      return [];
+    }
+
+    const seconds = previousTimestamp === null ? 0 : (timestamp - previousTimestamp) / 1000;
+    previousTimestamp = timestamp;
+    const issues = [];
+
+    for (const mapping of mappings) {
+      const key = mapping.field;
+      if (!statusBitSet(sample.status_word, mapping.bit) ||
+          !Number.isFinite(sample[key])) {
+        active.delete(key);
+        continue;
+      }
+
+      const prior = active.get(key);
+      if (!prior || sample[key] !== prior.value) {
+        active.set(key, { value: sample[key], elapsedS: 0, reported: false });
+        continue;
+      }
+
+      prior.elapsedS += seconds;
+      if (prior.elapsedS >= durationS && !prior.reported) {
+        prior.reported = true;
+        issues.push({
+          code: 'FROZEN_SENSOR',
+          field: key,
+          kind: 'bad',
+          text: `${key} remained ${sample[key]} while status_word bit ${mapping.bit} was active for at least ${durationS} s`,
+        });
+      }
+    }
+    return issues;
+  };
+
+  return Object.freeze({ update, reset });
+}
 
 const bad = (code, field, text) => ({ code, field, kind: 'bad', text });
 const stale = (code, field, text) => ({ code, field, kind: 'stale', text });
