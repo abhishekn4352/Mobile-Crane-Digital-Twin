@@ -96,17 +96,19 @@ export const KIT = Object.freeze({
   // one-to-one mappings are provisional TEAM assumptions for data-quality
   // monitoring, not manufacturer specifications.
   FROZEN_SENSOR_MAPPINGS: Object.freeze([
-    Object.freeze({ field: 'boom_length_m', bit: 0 }),
-    Object.freeze({ field: 'boom_angle_deg', bit: 1 }),
-    Object.freeze({ field: 'slew_deg', bit: 2 }),
+    Object.freeze({ field: 'boom_length_m', bit: 1 }),
+    Object.freeze({ field: 'boom_angle_deg', bit: 2 }),
+    Object.freeze({ field: 'slew_deg', bit: 3 }),
   ]),
   // TEAM noise/duration choice pending an authoritative sensor mapping.
-  FROZEN_SENSOR_DURATION_S: 3,
+  FROZEN_SENSOR_DURATION_S: 10,
 });
 
 export const SAFETY_LIMITS = Object.freeze({
   hookMinM: 6,
   hookTolM: 0.5,
+  radiusTolM: 0.1,
+  padSumTolT: 2,
   angleMinDeg: 0,
   angleMaxDeg: 85,
   telescopeMps: 0.3,
