@@ -60,6 +60,7 @@ const DEVICE_TYPES = new Set([
   'WIND_ALERT', 'LMI_BYPASS', 'LMI_PREWARNING', 'DEVICE_OVERLOAD', 'A2B_ALERT', 'LMI_DIVERGENCE',
 ]);
 // alarms whose triggerValue is the raw status_word: the panel shows the bit instead
+const FROZEN_NAME = { boom_length_m: 'boom length', boom_angle_deg: 'boom angle', slew_deg: 'slew angle' };
 const STATUS_BIT_OF = { LMI_BYPASS: 12, DEVICE_OVERLOAD: 7, A2B_ALERT: 9 };
 
 const fin = Number.isFinite;
@@ -129,8 +130,11 @@ export function analyseSample(sample, prev, deps, opts = {}) {
   // --- split the detector's output: data-quality verdict vs alarms
   let crane = [];
   const dataFromDetector = [];
+  const lmiBlank = [];        // device LMI blank while the chart has a value: a reporting gap, not a divergence
   for (const f of (detection && detection.failures) || []) {
-    if (f.type === 'DATA_QUALITY') dataFromDetector.push(String(f.triggerValue || f.rule)); else crane.push(f);
+    if (f.type === 'DATA_QUALITY') dataFromDetector.push(String(f.triggerValue || f.rule));
+    else if (f.type === 'LMI_DIVERGENCE' && !fin(f.triggerValue)) lmiBlank.push(f);
+    else crane.push(f);
   }
   if (detection && detection.status === 'INVALID_TELEMETRY' && dataFromDetector.length === 0) {
     dataFromDetector.push((detection.errors || []).join('; ') || 'invalid telemetry');
@@ -192,6 +196,24 @@ export function analyseSample(sample, prev, deps, opts = {}) {
       severity: CRITICAL_TYPES.has(f.type) ? 'critical' : 'warning',
       value, limit: f.limit, rule,
     });
+    // a lifted pad is also below the near-lift-off level: keep ONE near-lift-off episode running
+    // through the lift-off instead of closing it and opening a second one afterwards
+    if (f.type === 'OUTRIGGER_LIFT_OFF' && !failures.some((x) => x.type === 'OUTRIGGER_NEAR_LIFT_OFF')) {
+      raised.push({
+        kind: 'failure', type: 'OUTRIGGER_NEAR_LIFT_OFF', severity: 'warning', value: f.triggerValue,
+        limit: `${PAD_WATCH_T} t`, rule: `pad reaction is below ${PAD_WATCH_T} t on ${f.triggerValue}`,
+      });
+    }
+  }
+  if (level !== QUALITY.BAD) {
+    for (const f of lmiBlank) {
+      raised.push({
+        kind: 'data', type: 'LMI_BLANK', severity: 'data', value: 'device LMI blank',
+        limit: `chart ${fmt(capacity.t)} t`,
+        rule: `device LMI is blank but the chart has a capacity of ${fmt(capacity.t)} t for this boom and radius`,
+        note: 'reporting gap at a chart edge, not a crane failure',
+      });
+    }
   }
   if (level === QUALITY.BAD) {
     const bad = issues.filter((i) => i.kind === 'bad');
@@ -203,9 +225,19 @@ export function analyseSample(sample, prev, deps, opts = {}) {
       rule: bad.map((i) => i.text).join('; '), note: notes.join('. '),
     });
   }
-  for (const i of issues.filter((x) => x.kind === 'stale')) {
+  const frozen = issues.filter((x) => x.kind === 'stale' && x.code === 'FROZEN_SENSOR');
+  for (const i of issues.filter((x) => x.kind === 'stale' && x.code !== 'FROZEN_SENSOR')) {
     const type = i.code === 'TS_GAP' ? 'DROPOUT' : i.code === 'TS_REPEAT' ? 'REPEATED_TIMESTAMP' : 'CLOCK_BACKWARDS';
     raised.push({ kind: 'data', type, severity: 'data', value: i.text, limit: `${2} s`, rule: i.text, note: '' });
+  }
+  if (frozen.length) {
+    // a stuck sensor is a data problem (STALE), not a crane failure; the channels are one entry
+    const names = frozen.map((i) => FROZEN_NAME[i.field] || i.field).join(', ');
+    raised.push({
+      kind: 'data', type: 'SENSOR_FROZEN', severity: 'data', value: names, limit: `${KIT.FROZEN_SENSOR_DURATION_S} s`,
+      rule: `${names} read exactly the same for at least ${KIT.FROZEN_SENSOR_DURATION_S} s while the motion bit says the crane is moving`,
+      note: 'sensor or reporting problem, not a crane failure',
+    });
   }
 
   return {
@@ -349,6 +381,7 @@ function triggerText(e) {
   if (e.type === 'HYDRAULIC_PRESSURE_LOSS') return fin(v) ? `${fmt(v, 1)} bar` : String(v);
   if (e.type === 'WIND_ALERT') return fin(v) ? `${fmt(v, 0)} km/h` : String(v);
   if (e.type === 'LMI_PREWARNING') return fin(v) ? `${fmt(v, 1)} %` : String(v);
+  if (e.type === 'LMI_BLANK') return 'blank';
   if (e.type === 'LMI_DIVERGENCE') {
     const dev = fin(v) ? `${fmt(v, 1)} %` : 'blank';
     return fin(e.limit) ? `${dev} vs ${fmt(e.limit, 1)} %` : `${dev} vs chart`;
@@ -416,7 +449,7 @@ export function buildPanelModel(analysis, log, mode) {
     else if (v <= PAD_LIFT_OFF_T) c = cls.crit;   // at or below critical threshold (0.1 t)
     else if (v < PAD_WATCH_T) c = cls.warn;        // above critical but below near-lift-off watch level (5 t)
     if (flagged.has('pads')) c = cls.bad;
-    pads[name] = { text: fin(v) && !manual ? `${fmt(v, 1)} t` : '—', cls: c };
+    pads[name] = { text: fin(v) && !manual ? `${fmt(v, v > 0 && v < 1 ? 2 : 1)} t` : '—', cls: c };
   }
 
   // ---- capacity / utilisation / stability (from the shared modules, via the detector)

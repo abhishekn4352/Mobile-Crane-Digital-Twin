@@ -1,23 +1,3 @@
-// ============================================================
-// Cycle 3 - Mobile Crane Digital Twin
-// Module 4 helper - Data quality (OK / STALE / BAD DATA)
-//
-// Owner: Abhishek
-//
-// Why this exists
-//   Sir's kit README: "The file contains both real crane failures and
-//   impossible rows, but do not assume that every alarming row is a
-//   real failure. Handle the missing telemetry interval as a dropout."
-//   The failure detector decides about crane failures. This file decides
-//   whether a SAMPLE can be trusted at all, so the panel can show a
-//   data-quality problem instead of a crane alarm.
-//
-// Pure functions. No DOM, no THREE, no chart or stability code.
-// Every limit is labelled with where it comes from:
-//   KIT  = stated in or derived from sir's README
-//   TEAM = our own choice, not from sir
-// ============================================================
-
 import {
   KIT,
   SAFETY_LIMITS,
@@ -35,7 +15,7 @@ export const QUALITY = Object.freeze({
 export const LIMITS = Object.freeze({
   gapS: 2,                 // TEAM: more than 2 s between samples = dropout (data is 1 Hz)
   pivotOffsetM: KIT.PIVOT_OFFSET_M,   // KIT: radius = L*cos(angle) + 0.8
-  radiusTolM: 0.1,         // TEAM
+  radiusTolM: SAFETY_LIMITS.radiusTolM,
   hookTolM: SAFETY_LIMITS.hookTolM,
   hookMinM: SAFETY_LIMITS.hookMinM,
   angleMinDeg: SAFETY_LIMITS.angleMinDeg,
@@ -44,7 +24,7 @@ export const LIMITS = Object.freeze({
   luffDps: SAFETY_LIMITS.luffDps,
   slewDps: SAFETY_LIMITS.slewDps,
   baseMassT: KIT.MACHINE_MASS_T,      // KIT: 45 carrier + 35 superstructure + 80 counterweight + 10 boom
-  padSumTolT: 2,           // TEAM: sum of the four pads vs (170 t + hook load)
+  padSumTolT: SAFETY_LIMITS.padSumTolT,
 });
 
 const NUMERIC_CORE = [
@@ -111,17 +91,19 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
 
       const prior = active.get(key);
       if (!prior || sample[key] !== prior.value) {
-        active.set(key, { value: sample[key], elapsedS: 0, reported: false });
+        active.set(key, { value: sample[key], elapsedS: 0 });
         continue;
       }
 
       prior.elapsedS += seconds;
-      if (prior.elapsedS >= durationS && !prior.reported) {
-        prior.reported = true;
+      if (prior.elapsedS >= durationS) {
+        // Reported on every row while the freeze goes on, so the panel shows one alarm entry that stays
+        // active until the sensor moves again (or the motion bit clears). It is a STALE data problem:
+        // it must not hide a real crane alarm on the same row (kind 'bad' would).
         issues.push({
           code: 'FROZEN_SENSOR',
           field: key,
-          kind: 'bad',
+          kind: 'stale',
           text: `${key} remained ${sample[key]} while status_word bit ${mapping.bit} was active for at least ${durationS} s`,
         });
       }
@@ -133,21 +115,6 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
 }
 
 
-/**
- * Create a frozen-sensor tracker pre-configured with the provisional production
- * mappings and duration from KIT (craneModel.js). This is deliberately limited
- * to the fields whose motion relationship is documented in KIT; it does not
- * treat every sensor as changing for every active motion bit.
- *
- * IMPORTANT: the bit-to-field mapping and the duration are documented in
- * KIT.FROZEN_SENSOR_MAPPINGS and KIT.FROZEN_SENSOR_DURATION_S as UNRESOLVED /
- * TEAM choices.  This factory exists so callers (e.g. the playback path in
- * panelModel.js) can hold ONE instance that spans the recording rather than
- * re-creating it per sample.  Reset the tracker whenever the playback position
- * jumps, the stream is interrupted, or the sample sequence breaks.
- *
- * @returns {{ update(sample): Issue[], reset(): void }}
- */
 export function createProductionFrozenSensorTracker() {
   return createFrozenSensorTracker({
     mappings: Array.from(KIT.FROZEN_SENSOR_MAPPINGS),
@@ -159,10 +126,6 @@ const bad = (code, field, text) => ({ code, field, kind: 'bad', text });
 const stale = (code, field, text) => ({ code, field, kind: 'stale', text });
 
 
-/**
- * Problems that live in ONE sample (no previous sample needed).
- * Returns an array of issues; empty when the sample is self-consistent.
- */
 export function staticIssues(sample) {
   const issues = [];
   if (sample == null || typeof sample !== 'object') {
@@ -211,11 +174,6 @@ export function staticIssues(sample) {
   return issues;
 }
 
-
-/**
- * Problems between this sample and the one before it: timestamps and motion rates.
- * `prev` is the sample one row earlier in the recording (or null).
- */
 export function sequenceIssues(sample, prev) {
   const issues = [];
   if (!prev) return issues;

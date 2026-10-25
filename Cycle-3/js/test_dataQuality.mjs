@@ -11,6 +11,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parseCSV } from './playbackClock.js';
+import { KIT } from './craneModel.js';
 import {
   QUALITY, LIMITS, assessSample, staticIssues, sequenceIssues,
   expectedRadiusM, expectedHookHeightM, scanClockFaults,
@@ -125,8 +126,10 @@ check('active unchanged sensor does not report before the configured duration',
   tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30' }).length === 0);
 check('active unchanged sensor reports once at the configured duration',
   tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:03+05:30' })[0]?.code === 'FROZEN_SENSOR');
-check('continuing freeze does not duplicate the issue',
-  tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:04+05:30' }).length === 0);
+check('a continuing freeze is reported on every row as one STALE issue per channel (the panel keeps one entry open)', (() => {
+  const r = tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:04+05:30' });
+  return r.length === 1 && r[0].kind === 'stale' && r[0].code === 'FROZEN_SENSOR';
+})());
 check('inactive motion bit does not report and resets the candidate',
   tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:05+05:30', status_word: 0 }).length === 0 &&
   tracker.update({ ...frozenBase, ts: '2026-09-16T18:00:06+05:30' }).length === 0);
@@ -162,15 +165,22 @@ check('parked constant value does not report without an active motion bit', (() 
     t.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30', status_word: 0 }).length === 0 &&
     t.update({ ...frozenBase, ts: '2026-09-16T18:00:03+05:30', status_word: 0 }).length === 0;
 })());
-check('production tracker is wired to the shared provisional mapping and duration', (() => {
+const stepTs = (i) => new Date(Date.parse(frozenBase.ts) + i * 1000).toISOString();
+const runProduction = (statusWord, seconds) => {
   const t = createProductionFrozenSensorTracker();
-  const base = { ...frozenBase, status_word: 1 };
-  t.update(base);
-  t.update({ ...base, ts: '2026-09-16T18:00:01+05:30' });
-  t.update({ ...base, ts: '2026-09-16T18:00:02+05:30' });
-  return t.update({ ...base, ts: '2026-09-16T18:00:03+05:30' })
-    .some((issue) => issue.code === 'FROZEN_SENSOR' && issue.field === 'boom_length_m');
+  const out = [];
+  for (let i = 0; i <= seconds; i++) out.push(t.update({ ...frozenBase, ts: stepTs(i), status_word: statusWord }));
+  return out;
+};
+const D = KIT.FROZEN_SENSOR_DURATION_S;
+check('production mapping follows the kit README: bit 1 telescope -> boom length, bit 2 luff -> boom angle, bit 3 slew -> slew',
+  JSON.stringify(KIT.FROZEN_SENSOR_MAPPINGS.map((m) => [m.field, m.bit])) ===
+  JSON.stringify([['boom_length_m', 1], ['boom_angle_deg', 2], ['slew_deg', 3]]));
+check(`production tracker: telescope running (bit 1) reports boom length at ${D} s and not one second earlier`, (() => {
+  const r = runProduction(2, D);
+  return r[D - 1].length === 0 && r[D].some((x) => x.field === 'boom_length_m' && x.kind === 'stale');
 })());
+check('production tracker: a running HOIST (bit 0 only) never reports a frozen boom sensor', runProduction(1, D + 20).every((r) => r.length === 0));
 check('invalid production timestamp resets frozen tracking', (() => {
   const t = createProductionFrozenSensorTracker();
   const base = { ...frozenBase, status_word: 1 };
