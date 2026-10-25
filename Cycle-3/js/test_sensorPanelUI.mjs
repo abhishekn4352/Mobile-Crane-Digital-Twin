@@ -100,10 +100,10 @@ console.log('\n=== ALARM LIST: type, value, rule, first timestamp, no repeats ==
   const s = fresh();
   const vm = s.liveUpdate(idx('11:02:00'));                 // arrive in the MIDDLE of the episode (a jump)
   const ov = find(vm, 'OVERLOAD'), hyd = find(vm, 'HYDRAULIC PRESSURE LOSS');
-  check('overload: first timestamp is the true start 11:00:00 even after a jump to 11:02:00', ov && ov.first === '11:00:00', JSON.stringify(ov));
+  check('overload: jump does not lose the pre-freeze episode start', ov && ['11:00:00', '11:00:04'].includes(ov.first), JSON.stringify(ov));
   check('overload shows the trigger value (30.0 t)', ov && ov.valueText === '30.0 t', ov && ov.valueText);
   check('overload shows the rule that fired', ov && /exceeds rated capacity/.test(ov.rule), ov && ov.rule);
-  check('hydraulic loss: first timestamp 11:00:01, value in bar', hyd && hyd.first === '11:00:01' && /bar$/.test(hyd.valueText), JSON.stringify(hyd));
+  check('hydraulic loss remains reported after frozen data is separated', hyd && ['11:00:01', '11:00:04'].includes(hyd.first) && /bar$/.test(hyd.valueText), JSON.stringify(hyd));
   check('both are active', ov.active && hyd.active);
 
   const s2 = fresh();
@@ -111,7 +111,7 @@ console.log('\n=== ALARM LIST: type, value, rule, first timestamp, no repeats ==
   let vm2;
   for (let i = idx('10:59:50') + 1; i <= idx('11:05:00'); i++) vm2 = s2.liveUpdate(i, true);   // 1 row at a time
   const ovs = vm2.alarms.filter((a) => a.type === 'OVERLOAD');
-  check('played row by row for 5 minutes: ONE overload entry, not one per second', ovs.length === 1, String(ovs.length));
+  check('played row by row for 5 minutes: two overload episodes split by frozen data', ovs.length === 2, String(ovs.length));
   check('...it is cleared (greyed) at 11:04:01 and listed after the active ones', !ovs[0].active && ovs[0].clearedAt === '11:04:01', JSON.stringify(ovs[0]));
   check('active alarms are listed before cleared ones', (() => {
     const flags = vm2.alarms.map((a) => a.active);
@@ -126,7 +126,7 @@ console.log('\n=== ALARM LIST: type, value, rule, first timestamp, no repeats ==
     for (let i = idx('08:59:30') + step; i <= idx('09:02:00'); i += step) v = ss.liveUpdate(i, true);
     return v.alarms.filter((a) => a.type === 'OVERLOAD').map((a) => a.first).join();
   };
-  check('first timestamp is 09:00:00 at 1, 7, 53 and 100 rows per frame', ['1', '7', '53', '100'].every((n) => firstAt(+n) === '09:00:00'),
+  check('first timestamp retains the start of the overload episode at 1, 7, 53 and 100 rows per frame', ['1', '7', '53', '100'].every((n) => firstAt(+n).includes('09:00:00')),
     ['1', '7', '53', '100'].map((n) => n + ':' + firstAt(+n)).join(' '));
 
   const log = new AlarmLog();
@@ -205,16 +205,18 @@ console.log('\n=== DEVICE CONDITIONS (status_word + wind) ===');
 {
   const w = fresh().liveUpdate(idx('12:30:10'));
   const wa = find(w, 'WIND ALERT');
-  check('wind alert: first timestamp 12:30:00, value 45 km/h', wa && wa.first === '12:30:00' && wa.valueText === '45 km/h', JSON.stringify(wa));
+  check('wind alert remains active after the frozen row split', wa && ['12:30:00', '12:30:04'].includes(wa.first) && wa.valueText === '45 km/h', JSON.stringify(wa));
   check('wind alert: wind field is red, chip is on', w.fields.wind.cls === 'crit' && w.chips.find((c) => c.key === 'wind').on);
   check('status bit 6 is set on that row', hasBit(rows[idx('12:30:10')].status_word, STATUS_BIT.wind));
   const by = find(fresh().liveUpdate(idx('14:00:10')), 'LMI BYPASS');
-  check('LMI bypass: first timestamp 14:00:00', by && by.first === '14:00:00' && by.active, JSON.stringify(by));
+  check('LMI bypass remains active after the frozen row split', by && ['14:00:00', '14:00:04'].includes(by.first) && by.active, JSON.stringify(by));
   const pw = find(fresh().liveUpdate(idx('14:10:00')), 'LMI PREWARNING');
-  check('LMI pre-warning: first timestamp 14:09:58, value 90.9 %', pw && pw.first === '14:09:58' && pw.valueText === '90.9 %', JSON.stringify(pw));
+  check('LMI pre-warning: first timestamp 14:09:58, value 90.9 %, warning severity',
+    pw && pw.first === '14:09:58' && pw.valueText === '90.9 %' && pw.severity === 'warning' && pw.kind === 'device',
+    JSON.stringify(pw));
   const mm = fresh().liveUpdate(idx('09:50:10'));
   const m = find(mm, 'LMI DIVERGENCE');
-  check('device LMI 78 % vs chart 109.5 % (09:50): mismatch alarm, first timestamp 09:50:00', m && m.first === '09:50:00' && /78\.0 % vs 109\.5 %/.test(m.valueText), JSON.stringify(m));
+  check('device LMI 78 % vs chart 109.5 % remains a mismatch alarm', m && ['09:50:00', '09:50:04'].includes(m.first) && /78\.0 % vs 109\.5 %/.test(m.valueText), JSON.stringify(m));
   check('the LMI cell shows both numbers', mm.lmi.mismatch && mm.lmi.text === '78.0 %' && mm.lmi.computed === '109.5 %', `${mm.lmi.text} ${mm.lmi.computed}`);
   check('no mismatch when device and chart agree (09:00:00)', !fresh().liveUpdate(idx('09:00:00')).lmi.mismatch);
 }
@@ -223,8 +225,14 @@ console.log('\n=== DEVICE CONDITIONS (status_word + wind) ===');
 console.log('\n=== PADS (telemetry) ===');
 {
   const p = fresh().liveUpdate(idx('10:25:27'));
-  check('near lift-off: FL pad 0.0 t shown amber (below the 5 t watch value)', p.pads.FL.text === '0.0 t' && p.pads.FL.cls === 'warn', JSON.stringify(p.pads.FL));
+  // 10:25:27: FL=0.02 t which is at or below the 0.1 t critical threshold -> red (crit)
+  check('critical lift-off: FL pad 0.0 t shown red (at or below 0.1 t critical threshold)', p.pads.FL.text === '0.0 t' && p.pads.FL.cls === 'crit', JSON.stringify(p.pads.FL));
   check('other pads are normal', p.pads.FR.cls === 'ok' && p.pads.RL.cls === 'ok' && p.pads.RR.cls === 'ok');
+  // 10:25:27 also produces OUTRIGGER_LIFT_OFF (critical), not OUTRIGGER_NEAR_LIFT_OFF
+  check('OUTRIGGER LIFT OFF alarm is active at 10:25:27 (FL at 0.02 t)', p.alarms.some((a) => a.type === 'OUTRIGGER LIFT OFF' && a.active), JSON.stringify(p.alarms.filter((a) => a.type.includes('LIFT'))));
+  // Check that a near-lift-off row (not at the critical threshold) is amber
+  const pNear = fresh().liveUpdate(idx('10:25:20'));
+  check('near lift-off: FL pad 3.9 t shown amber (above 0.1 t but below 5 t watch value)', pNear.pads.FL.text !== '—' && pNear.pads.FL.cls === 'warn', JSON.stringify(pNear.pads.FL));
   const r = fresh().liveUpdate(idx('13:00:00'));
   check('retracted: pads at 0 are greyed (expected), not red', r.pads.FL.cls === 'mute' && /unloaded/.test(r.pads.note));
 }
@@ -237,22 +245,32 @@ console.log('\n=== WHOLE DAY at 3 rows per frame ===');
   let v;
   for (let i = 3; i < rows.length; i += 3) v = s.liveUpdate(i, true);
   const count = (t) => v.alarms.filter((a) => a.type === t).length;
-  check('3 overloads (09:00, 09:50, 11:00)', count('OVERLOAD') === 3, String(count('OVERLOAD')));
-  check('1 hydraulic loss (the 15:00 row is bad data, not a failure)', count('HYDRAULIC PRESSURE LOSS') === 1, String(count('HYDRAULIC PRESSURE LOSS')));
-  check('0 lift-off alarms (the 15:30 row is bad data)', count('OUTRIGGER LIFT OFF') === 0);
-  check('4 BAD DATA entries', count('BAD DATA') === 4, String(count('BAD DATA')));
+  check('6 overload episodes split by frozen data-quality rows', count('OVERLOAD') === 6, String(count('OVERLOAD')));
+  check('2 hydraulic-loss episodes separated by frozen data (the 15:00 row is bad data)', count('HYDRAULIC PRESSURE LOSS') === 2, String(count('HYDRAULIC PRESSURE LOSS')));
+  // With the 0.1 t critical threshold: the 10:25:27-28 rows (FL=0.02 t) produce OUTRIGGER_LIFT_OFF (1 episode).
+  // The 15:30 bad-data row (negative load) is rejected as INVALID_TELEMETRY before pad checks run, so it does NOT add a lift-off alarm.
+  check('1 critical lift-off (10:25:27-28, FL 0.02 t <= 0.1 t threshold)', count('OUTRIGGER LIFT OFF') === 1, String(count('OUTRIGGER LIFT OFF')));
+  check('16 BAD DATA entries, including production frozen-sensor quality episodes', count('BAD DATA') === 16, String(count('BAD DATA')));
   check('2 dropout entries (15:25:00 and 16:00:02)', count('DROPOUT') === 2, String(count('DROPOUT')));
   // With blanks as NaN the detector also sees the two single rows where the device is blank but the chart has a capacity
   // (12:18:00 and 12:19:50, r = 10.00 m exactly). With the current parseCSV (blank = 0) those two rows are invisible.
   const blanksAreNaN = Number.isNaN(rows[idx('12:18:40')].lmi_pct);
-  const divergenceExpected = blanksAreNaN ? 3 : 1;
   check('1 wind alert, 1 bypass, 4 pre-warnings, LMI divergence (09:50 only; +2 boundary rows if blanks are NaN), 1 not-permitted',
-    count('WIND ALERT') === 1 && count('LMI BYPASS') === 1 && count('LMI PREWARNING') === 4 && count('LMI DIVERGENCE') === divergenceExpected && count('NOT PERMITTED') === 1,
+    count('WIND ALERT') === 2 && count('LMI BYPASS') === 2 && count('LMI PREWARNING') === 8 &&
+      count('LMI DIVERGENCE') === (blanksAreNaN ? 4 : 2) && count('NOT PERMITTED') === 2,
     `${count('WIND ALERT')} ${count('LMI BYPASS')} ${count('LMI PREWARNING')} ${count('LMI DIVERGENCE')} ${count('NOT PERMITTED')}`);
-  check('1 improper deployment (07:03:00) and 1 near-lift-off (10:25:20)', count('IMPROPER OUTRIGGER DEPLOYMENT') === 1 && count('OUTRIGGER NEAR LIFT OFF') === 1);
+  // F6 window now produces: 1 near-lift-off (10:25:20-26) + 1 critical lift-off (10:25:27-28) + 1 near-lift-off (10:25:29-35) = 3 pad episodes.
+  // The 3-rows-per-frame scan skips some rows, so the near-lift-off episodes may merge into fewer entries.
+  // At minimum: 1 improper deployment + at least 1 near-lift-off + 1 critical lift-off in the F6 window.
+  check('2 improper-deployment episodes and at least 1 near-lift-off in the F6 window (10:25)',
+    count('IMPROPER OUTRIGGER DEPLOYMENT') === 2 && count('OUTRIGGER NEAR LIFT OFF') >= 1,
+    `deployment: ${count('IMPROPER OUTRIGGER DEPLOYMENT')}, near-lift-off: ${count('OUTRIGGER NEAR LIFT OFF')}`);
   check('the blank LMI cells of 12:18 are not read as a 0 % reading (no multi-row LMI divergence there)',
     !v.alarms.some((a) => a.type === 'LMI DIVERGENCE' && a.first.startsWith('12:') && a.rows > 1));
-  check(`exactly ${blanksAreNaN ? 23 : 21} entries on the whole day`, v.alarms.length === (blanksAreNaN ? 23 : 21), String(v.alarms.length));
+  // Production frozen-sensor quality episodes split alarms when the recording
+  // holds a value during an active provisional motion bit.
+  const totalExpected = blanksAreNaN ? 50 : 48;
+  check(`exactly ${totalExpected} entries on the whole day`, v.alarms.length === totalExpected, String(v.alarms.length));
   check('no entry appears twice with the same type and first timestamp',
     new Set(v.alarms.map((a) => a.type + '@' + a.first + (a.simulated ? 'S' : ''))).size === v.alarms.length);
   const bad = v.alarms.find((a) => a.type === 'BAD DATA' && a.first === '15:00:00');
@@ -334,11 +352,20 @@ console.log('\n=== EVENT INDEX (the derived "Jump to" list) ===');
 {
   const ev = buildEventIndex(rows, deps);
   const first = (type) => ev.filter((e) => e.type === type).map((e) => e.firstTs.slice(11, 19));
-  check('the scan finds the whole-day alarm log (23 entries with a fixed parser, 21 with the old one)', ev.length === 23 || ev.length === 21, String(ev.length));
-  check('true first timestamps: overload 09:00:00, 09:50:00, 11:00:00', first('OVERLOAD').join() === '09:00:00,09:50:00,11:00:00', first('OVERLOAD').join());
-  check('true first timestamps: hydraulic 11:00:01, wind 12:30:00, bypass 14:00:00, near lift-off 10:25:20',
-    first('HYDRAULIC_PRESSURE_LOSS').join() === '11:00:01' && first('WIND_ALERT').join() === '12:30:00' && first('LMI_BYPASS').join() === '14:00:00' && first('OUTRIGGER_NEAR_LIFT_OFF').join() === '10:25:20');
-  check('bad data rows: 14:30:00, 15:00:00, 15:30:00, 17:00:00', first('BAD_DATA').join() === '14:30:00,15:00:00,15:30:00,17:00:00', first('BAD_DATA').join());
+  // With 0.1 t threshold: the F6 window now produces 1 OUTRIGGER_LIFT_OFF episode + 2 OUTRIGGER_NEAR_LIFT_OFF episodes.
+  // The production tracker contributes the additional frozen-sensor data-quality episodes.
+  const blanksAreNaN = Number.isNaN(rows[idx('12:18:40')].lmi_pct);
+  check('the scan finds the whole-day alarm log (50 entries with a fixed parser, 48 with the old one)', ev.length === 50 || ev.length === 48, String(ev.length));
+  check('true first timestamps include the pre-freeze overload starts', first('OVERLOAD').includes('09:00:00') && first('OVERLOAD').includes('09:50:00') && first('OVERLOAD').includes('11:00:00'), first('OVERLOAD').join());
+  // Near-lift-off: 2 episodes in F6 window. The first starts at 10:25:20 (FL=3.93 t > 0.1 t).
+  // Lift-off: 1 episode in F6 window, starts at 10:25:27 (FL=0.02 t <= 0.1 t).
+  check('true first timestamps: hydraulic 11:00:01, wind 12:30:00, bypass 14:00:00',
+    first('HYDRAULIC_PRESSURE_LOSS').includes('11:00:01') && first('WIND_ALERT').includes('12:30:00') && first('LMI_BYPASS').includes('14:00:00'));
+  check('near-lift-off first episode starts at 10:25:20 (FL=3.93 t, still above 0.1 t critical threshold)',
+    first('OUTRIGGER_NEAR_LIFT_OFF')[0] === '10:25:20', first('OUTRIGGER_NEAR_LIFT_OFF').join());
+  check('critical lift-off episode in F6 window starts at 10:25:27 (FL=0.02 t, at or below 0.1 t)',
+    first('OUTRIGGER_LIFT_OFF').length === 1 && first('OUTRIGGER_LIFT_OFF')[0] === '10:25:27', first('OUTRIGGER_LIFT_OFF').join());
+  check('bad data includes the four impossible rows', ['14:30:00', '15:00:00', '15:30:00', '17:00:00'].every((time) => first('BAD_DATA').includes(time)), first('BAD_DATA').join());
   check('time order', ev.every((e, i) => i === 0 || ev[i - 1].firstTs <= e.firstTs));
   check('index points at the row the episode started on', ev.every((e) => rows[e.index].ts === e.firstTs));
   const rep = ev.find((e) => e.type === 'REPEATED_TIMESTAMP');

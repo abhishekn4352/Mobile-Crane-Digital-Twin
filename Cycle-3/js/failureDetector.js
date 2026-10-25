@@ -10,6 +10,13 @@ import {
   padReactionsFor,
 } from './craneModel.js';
 
+// Pad thresholds come from KIT (craneModel.js) to stay DRY.
+// PAD_LIFT_OFF_T (0.1 t): mentor-requested critical boundary. A finite pad at or below
+// this value is OUTRIGGER_LIFT_OFF (critical). [TEAM]
+// PAD_NEAR_LIFT_T (5 t): existing near-lift-off watch level. A finite pad above PAD_LIFT_OFF_T
+// but below this value is OUTRIGGER_NEAR_LIFT_OFF (warning). [TEAM/KIT]
+// A non-finite deployed pad is a data-quality issue (invalidPads), not confirmed lift-off.
+const PAD_LIFT_OFF_T = KIT.PAD_LIFT_OFF_T;
 const PAD_NEAR_LIFT_T = KIT.PAD_NEAR_LIFT_T;
 const PAD_SUM_TOLERANCE = 3;
 
@@ -168,9 +175,15 @@ export function calculateFailureInputs(telemetry) {
   };
   const deployed = telemetry.outrigger_state === 'DEPLOYED';
   const padEntries = Object.entries(pads);
-  const liftedPads = deployed ? padEntries.filter(([, value]) => finite(value) && value <= 0).map(([name]) => name) : [];
+  // liftedPads: finite pad at or below the critical threshold (0.1 t).
+  // Includes zero and negative reactions. Non-finite reactions are invalidPads (data quality),
+  // not OUTRIGGER_LIFT_OFF — missing sensor data is not proof of physical lift-off. [TEAM]
+  const liftedPads = deployed
+    ? padEntries.filter(([, value]) => finite(value) && value <= PAD_LIFT_OFF_T).map(([name]) => name)
+    : [];
+  // nearLiftedPads: finite pad above the critical threshold but below the 5 t watch level.
   const nearLiftedPads = deployed
-    ? padEntries.filter(([name, value]) => finite(value) && value > 0 && value < PAD_NEAR_LIFT_T &&
+    ? padEntries.filter(([name, value]) => finite(value) && value > PAD_LIFT_OFF_T && value < PAD_NEAR_LIFT_T &&
       !liftedPads.includes(name)).map(([name]) => name)
     : [];
   const invalidPads = deployed ? padEntries.filter(([, value]) => !finite(value)).map(([name]) => name) : [];
@@ -237,11 +250,13 @@ export function detectFailures(telemetry, previousTelemetry = null) {
     add('OVERLOAD', loadT, derived.capacityT, `load ${loadT} t exceeds rated capacity ${derived.capacityT.toFixed(2)} t`);
   }
   if (derived.liftedPads.length > 0) {
-    add('OUTRIGGER_LIFT_OFF', derived.liftedPads.join(', '), '> 0 t reaction on every deployed pad',
-      `recorded pad reaction is zero/non-positive on ${derived.liftedPads.join(', ')}`);
+    add('OUTRIGGER_LIFT_OFF', derived.liftedPads.join(', '),
+      `> ${PAD_LIFT_OFF_T} t reaction on every deployed pad`,
+      `recorded pad reaction is at or below ${PAD_LIFT_OFF_T} t (critical lift-off threshold) on ${derived.liftedPads.join(', ')}`);
   } else if (derived.nearLiftedPads.length > 0) {
-    add('OUTRIGGER_NEAR_LIFT_OFF', derived.nearLiftedPads.join(', '), '>= 5 t reaction',
-      `recorded pad reaction is below 5 t on ${derived.nearLiftedPads.join(', ')}`);
+    add('OUTRIGGER_NEAR_LIFT_OFF', derived.nearLiftedPads.join(', '),
+      `>= ${PAD_NEAR_LIFT_T} t reaction`,
+      `recorded pad reaction is above ${PAD_LIFT_OFF_T} t but below ${PAD_NEAR_LIFT_T} t on ${derived.nearLiftedPads.join(', ')}`);
   }
   if (telemetry.outrigger_state === 'DEPLOYED' && derived.stability === 'tipping') {
     add('STABILITY_LOSS', derived.stability, 'ok/warn', 'kit combined centre of gravity is outside the outrigger support polygon');

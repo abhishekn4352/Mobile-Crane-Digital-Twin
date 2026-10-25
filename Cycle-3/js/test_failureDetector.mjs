@@ -216,6 +216,62 @@ if (!liftOffResult.failures.some(failure => failure.type === 'OUTRIGGER_LIFT_OFF
   throw new Error('A valid zero-reaction pad sample must retain OUTRIGGER_LIFT_OFF detection');
 }
 
+for (const [boundaryIndex, [reaction, expectedType]] of [
+  [-1, 'OUTRIGGER_LIFT_OFF'],
+  [0, 'OUTRIGGER_LIFT_OFF'],
+  [0.05, 'OUTRIGGER_LIFT_OFF'],
+  [0.1, 'OUTRIGGER_LIFT_OFF'],
+  [0.100001, 'OUTRIGGER_NEAR_LIFT_OFF'],
+  [4.99, 'OUTRIGGER_NEAR_LIFT_OFF'],
+  [5, null],
+  [20, null],
+].entries()) {
+  const result = detectFailures({
+    ts: `2026-09-16T15:31:${String(10 + boundaryIndex).padStart(2, '0')}+05:30`,
+    load_t: 10,
+    boom_length_m: 32,
+    boom_angle_deg: 65.64,
+    radius_m: 14,
+    slew_deg: 0,
+    outrigger_state: 'DEPLOYED',
+    pad_fl_t: reaction,
+    pad_fr_t: (180 - reaction) / 3,
+    pad_rl_t: (180 - reaction) / 3,
+    pad_rr_t: (180 - reaction) / 3,
+    hydraulic_pressure_bar: 118,
+    wind_kmh: 10,
+    lmi_pct: 22.12,
+    status_word: 0,
+  });
+  const padAlarm = result.failures.find(failure =>
+    failure.type === 'OUTRIGGER_LIFT_OFF' || failure.type === 'OUTRIGGER_NEAR_LIFT_OFF');
+  if (expectedType ? padAlarm?.type !== expectedType : padAlarm) {
+    throw new Error(`Pad reaction ${reaction} t should classify as ${expectedType || 'normal'}, got ${padAlarm?.type || 'none'}`);
+  }
+}
+
+const missingPadResult = detectFailures({
+  ts: '2026-09-16T15:32:00+05:30',
+  load_t: 10,
+  boom_length_m: 32,
+  boom_angle_deg: 65.64,
+  radius_m: 14,
+  slew_deg: 0,
+  outrigger_state: 'DEPLOYED',
+  pad_fl_t: NaN,
+  pad_fr_t: 60,
+  pad_rl_t: 60,
+  pad_rr_t: 60,
+  hydraulic_pressure_bar: 118,
+  wind_kmh: 10,
+  lmi_pct: 22.12,
+  status_word: 0,
+});
+if (!missingPadResult.failures.some(failure => failure.type === 'DATA_QUALITY') ||
+    missingPadResult.failures.some(failure => failure.type === 'OUTRIGGER_LIFT_OFF')) {
+  throw new Error('A missing deployed pad reaction must be DATA_QUALITY, not confirmed lift-off');
+}
+
 
 // ------------------------------------------------------------
 // 6. RECORDING-BASED ALARM REGRESSIONS

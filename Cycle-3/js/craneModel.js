@@ -86,8 +86,22 @@ export const KIT = Object.freeze({
   }),
 
   PAD_ORDER: Object.freeze(['fl', 'fr', 'rl', 'rr']),
+  // TEAM rule requested by the Cycle 3 mentor: a finite deployed-pad
+  // reaction at or below this value is classified as critical lift-off.
+  PAD_LIFT_OFF_T: 0.1,
   PAD_NEAR_LIFT_T: 5,
   WARN_MARGIN_M: DEFAULT_WARN_MARGIN_M,
+
+  // The recording documents bits 0-3 only as a coarse motion group.  These
+  // one-to-one mappings are provisional TEAM assumptions for data-quality
+  // monitoring, not manufacturer specifications.
+  FROZEN_SENSOR_MAPPINGS: Object.freeze([
+    Object.freeze({ field: 'boom_length_m', bit: 0 }),
+    Object.freeze({ field: 'boom_angle_deg', bit: 1 }),
+    Object.freeze({ field: 'slew_deg', bit: 2 }),
+  ]),
+  // TEAM noise/duration choice pending an authoritative sensor mapping.
+  FROZEN_SENSOR_DURATION_S: 3,
 });
 
 export const SAFETY_LIMITS = Object.freeze({

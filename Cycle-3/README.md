@@ -5,12 +5,12 @@
 | Area | Source or implementation | Status |
 |---|---|---|
 | Recorded telemetry | `data/mobile-telemetry-2026-09-16.csv` | Real recording; pad reactions retain the legacy 8.9 m Z fixture |
-| Load chart | Grove GMK5250L-1 manufacturer PDF, page 17, [official Manitowoc PDF](https://www.manitowoc.com/media/15016/download) | The checked 70 m / 30 m cell is verified as 12.1 t; other cells are not all independently verified |
+| Load chart | [Local official PDF](../Cycle-2/js/Grove-GMK5250L-1-load-chart.pdf), page 17; [official Manitowoc source](https://www.manitowoc.com/media/15016/download) | The 70 m / 30 m cell is 12.1 t on PDF page 17; other cells are not all independently verified |
 | Outrigger geometry | Manufacturer PDF, page 13; `js/craneModel.js` | Verified: X = 7.8 m, Z = 8.95 m; pads X ±3.9 m, Z ±4.475 m |
 | Stability, pad reactions, alarms, data quality | Cycle 3 model and detector rules | Computed from the current implementation and tested |
 | Manual controls and wind sway | Cycle 3 UI assumptions | Simulated or visual-only; not manufacturer telemetry |
-| Frozen-sensor detection | `createFrozenSensorTracker()` in `js/dataQuality.js` | Partial: safe opt-in state-machine helper exists, but production detection remains disabled pending verified mapping and duration |
-| Near-lift-off threshold | `KIT.PAD_NEAR_LIFT_T` in `js/craneModel.js` | 5 t is retained as the existing kit/team rule; engineering and sensor-noise justification remains unresolved |
+| Frozen-sensor detection | `createProductionFrozenSensorTracker()` in `js/dataQuality.js` and the sequential panel path | Enabled for the documented provisional mappings; the sensor-to-motion mapping and 3 s interval remain TEAM assumptions pending authoritative confirmation |
+| Critical / near-lift-off thresholds | `KIT.PAD_LIFT_OFF_T` and `KIT.PAD_NEAR_LIFT_T` in `js/craneModel.js` | 0.1 t is the mentor-requested critical boundary; 5 t remains the existing warning rule; neither is claimed as manufacturer-approved |
 
 ## Module 1 — Playback & Clock
 
@@ -184,9 +184,11 @@ calculations rather than duplicating those calculations.
   slew angle, centre of gravity, load position, and the outrigger support
   polygon. A deployed row with a `tipping` verdict produces
   `STABILITY_LOSS`.
-- A deployed pad reaction below 5 t produces
-  `OUTRIGGER_NEAR_LIFT_OFF`; a non-positive reaction produces
-  `OUTRIGGER_LIFT_OFF`. These thresholds are kit/model thresholds.
+- A finite deployed pad reaction at or below 0.1 t produces critical
+  `OUTRIGGER_LIFT_OFF`; a finite reaction above 0.1 t and below 5 t produces
+  warning `OUTRIGGER_NEAR_LIFT_OFF`. Missing or non-finite reactions produce
+  `DATA_QUALITY`, not a confirmed lift-off. These are team/model thresholds,
+  with 0.1 t requested by the mentor and not claimed as manufacturer-approved.
 
 ### Hydraulic and deployment rules
 
@@ -209,18 +211,18 @@ calculations rather than duplicating those calculations.
   only as a coarse motion-active group for the outrigger-deployment rule; the
   repository does not identify which bit belongs to boom telescope, luff, slew,
   hoist, or another sensor.
-- Frozen-sensor detection is **partially implemented, not enabled in production**.
+- Frozen-sensor detection is enabled in the production panel/data-quality path.
   `createFrozenSensorTracker()` accepts an explicit bit-to-field mapping and
   duration, then safely resets on inactive motion, value changes, invalid values,
   invalid/duplicate timestamps, and gaps, and emits one `FROZEN_SENSOR` issue per
-  continuing candidate. It has no defaults, so it cannot silently apply an
-  unapproved mapping or threshold.
+  continuing candidate. The production factory uses only the provisional
+  one-to-one mappings in `KIT.FROZEN_SENSOR_MAPPINGS` (boom length → bit 0,
+  boom angle → bit 1, slew → bit 2) and the 3 s TEAM interval.
 - The supplied CSV contains status values and event labels but no authoritative
-  mapping from bits 0–3 to sensor fields and no approved frozen interval.
-  Existing telemetry does not prove that unchanged values during an active bit
-  are faulty rather than rounded, quantized, or legitimately held. Mentor
-  approval is required before wiring this helper into `assessSample()` or
-  `detectFailures()`.
+  mapping from bits 0–3 to sensor fields and no approved frozen interval/noise
+  threshold. The provisional configuration deliberately does not assume every
+  sensor changes for every active motion bit. Mentor/module-owner confirmation
+  is still required before treating those mappings or duration as verified.
 - Status word bit 7 produces `DEVICE_OVERLOAD` when set and no calculated
   `OVERLOAD` is already present.
 - Status word bit 8, or computed utilization from 90% up to but below
@@ -386,11 +388,15 @@ If the operating condition is not permitted by the load chart, the module return
 
 #### Cross-check against the manufacturer PDF (review items 1 and 2)
 
-`loadchart.js` cites `https://www.manitowoc.com/media/15016/download`. That PDF is not stored in the repository, so it was downloaded and read cell by cell against our table:
+`loadchart.js` cites `https://www.manitowoc.com/media/15016/download`. The original
+response is stored beside the chart as
+`../Cycle-2/js/Grove-GMK5250L-1-load-chart.pdf`. The 70 m / 30 m cell is
+12.1 t on PDF page 17. Other cells are not all independently verified.
 
 * Page 17 — *Telescopic boom*, `13,3 – 70,0 m | 7,8 m | 360 ° | 80 t | EN 13000`, which is exactly the configuration `CHART.config` declares.
-* All **35** cells of our 5 boom × 7 radius table were read out of that page and compared with `CHART.capacityT`.
-* **34 of 35 cells match the PDF exactly.** One did not — item 2 below.
+* The repository explicitly records the 70 m / 30 m cross-check below.
+  The remaining chart cells should not be treated as independently verified
+  solely from this project documentation.
 
 **Item 1 — radius 10.00 m at boom 45.6 m (12:18:00 and 12:19:50).** Yes, r = 10 m **is** allowed for this boom length.
 
@@ -656,14 +662,14 @@ What the panel does before calling the detector:
 ### 5. Testing
 
 ```
-node Cycle-3/js/test_sensorPanelUI.mjs     # 125 checks
-node Cycle-3/js/test_dataQuality.mjs       # 37 checks
+node Cycle-3/js/test_sensorPanelUI.mjs     # 129 checks
+node Cycle-3/js/test_dataQuality.mjs       # 49 checks
 node Cycle-3/js/test_crane3d.mjs           # 51 checks
 ```
 
-`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads, the whole day at 3 rows per frame (23 entries), the NO DATA state during a dropout, the derived Jump list (true first timestamps), what is passed to the detector, and that nothing throws. The page itself was checked in a headless browser (26 checks, no console errors): what is visible in LIVE (playback only) and in MANUAL (sliders only), the derived Jump list, MANUAL ↔ LIVE, overload, BAD DATA, NOT PERMITTED, wind, and playing into the dropout.
+`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads, the whole day at 3 rows per frame (50 entries with the fixed parser), the NO DATA state during a dropout, the derived Jump list (true first timestamps), what is passed to the detector, and that nothing throws. The page itself was checked in a headless browser (26 checks, no console errors): what is visible in LIVE (playback only) and in MANUAL (sliders only), the derived Jump list, MANUAL ↔ LIVE, overload, BAD DATA, NOT PERMITTED, wind, and playing into the dropout.
 
-Whole-day alarm log (23 entries; the two single-row LMI divergence entries at 12:18:00 and 12:19:50 are where the device is blank but our chart still gives 41.4 t, see the fault list, A6. With the old `parseCSV`, which read a blank as 0, the log had 21 entries): improper deployment 07:03:00 · overload 09:00:00 · overload + LMI divergence 09:50:00 · near lift-off 10:25:20 · overload 11:00:00 · hydraulic loss 11:00:01 · NOT PERMITTED 12:18:40 · wind 12:30:00 · LMI bypass 14:00:00 · pre-warning ×4 (14:09:58, 14:19:58, 14:39:58, 14:49:58) · BAD DATA ×4 (14:30:00, 15:00:00, 15:30:00, 17:00:00) · dropout 15:25:00 · repeated timestamp 15:59:49 · dropout 16:00:02.
+Whole-day alarm log (50 entries with the current parser): the production frozen-sensor data-quality episodes are included and split overlapping detector episodes when a provisional motion bit remains active while its mapped value is unchanged. The impossible rows remain BAD DATA, blank LMI boundary rows remain data-quality/device conditions rather than confirmed failures, and the F6 pad window contains warning near-lift-off episodes plus the mentor-requested critical lift-off episode.
 
 ### 6. Module 4 source notes
 

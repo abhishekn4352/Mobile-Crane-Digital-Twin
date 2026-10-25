@@ -63,12 +63,10 @@ export const expectedRadiusM = (lengthM, angleDeg) => radiusFromAngle(lengthM, a
 export { expectedHookHeightM };
 
 /**
- * Build an opt-in frozen-sensor tracker.
+ * Build a frozen-sensor tracker from an explicit mapping and duration.
  *
- * This helper intentionally has no production mapping or default duration:
- * the supplied telemetry and project documents do not establish which
- * motion bit owns which sensor, or an approved freeze interval. Callers must
- * provide both before this can be enabled for a real crane.
+ * The generic helper remains configurable so tests and future integrations do
+ * not silently inherit the provisional production assumptions in KIT.
  */
 export function createFrozenSensorTracker({ mappings, durationS } = {}) {
   if (!Array.isArray(mappings) || mappings.length === 0 ||
@@ -132,6 +130,29 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
   };
 
   return Object.freeze({ update, reset });
+}
+
+
+/**
+ * Create a frozen-sensor tracker pre-configured with the provisional production
+ * mappings and duration from KIT (craneModel.js). This is deliberately limited
+ * to the fields whose motion relationship is documented in KIT; it does not
+ * treat every sensor as changing for every active motion bit.
+ *
+ * IMPORTANT: the bit-to-field mapping and the duration are documented in
+ * KIT.FROZEN_SENSOR_MAPPINGS and KIT.FROZEN_SENSOR_DURATION_S as UNRESOLVED /
+ * TEAM choices.  This factory exists so callers (e.g. the playback path in
+ * panelModel.js) can hold ONE instance that spans the recording rather than
+ * re-creating it per sample.  Reset the tracker whenever the playback position
+ * jumps, the stream is interrupted, or the sample sequence breaks.
+ *
+ * @returns {{ update(sample): Issue[], reset(): void }}
+ */
+export function createProductionFrozenSensorTracker() {
+  return createFrozenSensorTracker({
+    mappings: Array.from(KIT.FROZEN_SENSOR_MAPPINGS),
+    durationS: KIT.FROZEN_SENSOR_DURATION_S,
+  });
 }
 
 const bad = (code, field, text) => ({ code, field, kind: 'bad', text });
@@ -238,10 +259,27 @@ export function sequenceIssues(sample, prev) {
 
 /**
  * Is this sample trustworthy?
+ *
+ * @param sample        the current telemetry sample (CSV row object)
+ * @param prev          the sample before it, or null
+ * @param frozenTracker optional result of createProductionFrozenSensorTracker()
+ *                      (or createFrozenSensorTracker()).  When supplied, the
+ *                      tracker is updated with this sample and any FROZEN_SENSOR
+ *                      issues are merged into the result.
+ *
+ *                      The tracker is stateful — it must be the same instance
+ *                      across consecutive calls in recording / streaming order.
+ *                      Pass null or omit for one-shot quality checks where no
+ *                      cross-sample tracking is needed.
+ *
  * @returns { level: 'OK'|'STALE'|'BAD DATA', issues: [{code, field, kind, text}] }
  */
-export function assessSample(sample, prev = null) {
+export function assessSample(sample, prev = null, frozenTracker = null) {
   const issues = [...staticIssues(sample), ...sequenceIssues(sample, prev)];
+  if (frozenTracker) {
+    const frozenIssues = frozenTracker.update(sample);
+    issues.push(...frozenIssues);
+  }
   const level = issues.some((i) => i.kind === 'bad')
     ? QUALITY.BAD
     : issues.length ? QUALITY.STALE : QUALITY.OK;

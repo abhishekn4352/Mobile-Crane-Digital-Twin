@@ -26,7 +26,13 @@
 // ============================================================
 
 import { KIT, statusBitSet } from './craneModel.js';            // Module 3: kit constants live there only
-import { QUALITY, LIMITS, assessSample, staticIssues } from './dataQuality.js';
+import {
+  QUALITY,
+  LIMITS,
+  assessSample,
+  staticIssues,
+  createProductionFrozenSensorTracker,
+} from './dataQuality.js';
 import { expectedRadiusM, expectedHookHeightM } from './dataQuality.js';
 
 export const MODE = Object.freeze({ LIVE: 'LIVE', MANUAL: 'MANUAL' });
@@ -37,7 +43,8 @@ export const STATUS_BIT = Object.freeze({ outriggersSet: 4, wind: 6, overload: 7
 
 // TEAM thresholds (not from sir): LMI mismatch tolerance, pad colouring.
 export const LMI_TOLERANCE_PCT = 2;
-export const PAD_WATCH_T = KIT.PAD_NEAR_LIFT_T;   // the kit / detector near-lift-off value
+export const PAD_LIFT_OFF_T = KIT.PAD_LIFT_OFF_T; // critical threshold: pad <= this => OUTRIGGER_LIFT_OFF
+export const PAD_WATCH_T = KIT.PAD_NEAR_LIFT_T;   // warning threshold: pad > PAD_LIFT_OFF_T but < this => near-lift-off
 export const PREWARN_PCT = 90;         // KIT: bit 8 = LMI pre-warning (>= 90 %)
 
 const JUMP_ROWS = 1200;                // a forward step bigger than this is treated as a jump
@@ -97,7 +104,7 @@ function withNeutralPads(sample) {
  */
 export function analyseSample(sample, prev, deps, opts = {}) {
   const manual = !!opts.manual;
-  const quality = assessSample(sample, manual ? null : prev);
+  const quality = assessSample(sample, manual ? null : prev, opts.frozenTracker || null);
 
   // The previous row goes to the detector's rate check only if that row is itself believable.
   const prevOk = !manual && prev && !staticIssues(prev).some((i) => i.kind === 'bad');
@@ -406,8 +413,8 @@ export function buildPanelModel(analysis, log, mode) {
     let c = cls.ok;
     if (!fin(v) || manual) c = cls.mute;
     else if (s.outrigger_state !== 'DEPLOYED') c = cls.mute;
-    else if (v <= 0) c = cls.crit;
-    else if (v < PAD_WATCH_T) c = cls.warn;
+    else if (v <= PAD_LIFT_OFF_T) c = cls.crit;   // at or below critical threshold (0.1 t)
+    else if (v < PAD_WATCH_T) c = cls.warn;        // above critical but below near-lift-off watch level (5 t)
     if (flagged.has('pads')) c = cls.bad;
     pads[name] = { text: fin(v) && !manual ? `${fmt(v, 1)} t` : '—', cls: c };
   }
@@ -555,6 +562,9 @@ export class PanelSession {
   constructor(rows, deps) {
     this.rows = rows;
     this.deps = deps;
+    const frozenTracker = createProductionFrozenSensorTracker();
+    this._analyses = rows.map((sample, index) =>
+      analyseSample(sample, index > 0 ? rows[index - 1] : null, deps, { frozenTracker }));
     this.log = new AlarmLog();
     this.mode = MODE.LIVE;
     this.lastIdx = null;
@@ -566,7 +576,7 @@ export class PanelSession {
   /** Analysis of recording row i (same answer however the playback got there). */
   analyseRow(i) {
     if (this._memo.i === i) return this._memo.a;
-    const a = analyseSample(this.rows[i], i > 0 ? this.rows[i - 1] : null, this.deps);
+    const a = this._analyses[i];
     this._memo = { i, a };
     return a;
   }
@@ -576,7 +586,7 @@ export class PanelSession {
     return (raised) => {
       let found = { ts: this.rows[index].ts, raised };
       for (let k = index - 1; k >= 0 && index - k <= MAX_LOOKBACK_ROWS; k--) {
-        const a = analyseSample(this.rows[k], k > 0 ? this.rows[k - 1] : null, this.deps);
+        const a = this.analyseRow(k);
         const hit = a.raised.find((x) => x.kind === raised.kind && x.type === raised.type);
         if (!hit) break;
         found = { ts: a.ts, raised: hit };
@@ -656,9 +666,10 @@ export class PanelSession {
  */
 export function buildEventIndex(rows, deps) {
   const log = new AlarmLog(Number.MAX_SAFE_INTEGER);
+  const frozenTracker = createProductionFrozenSensorTracker();
   for (let i = 0; i < rows.length; i++) {
     const n = log.entries.length;
-    log.ingest(analyseSample(rows[i], i > 0 ? rows[i - 1] : null, deps));
+    log.ingest(analyseSample(rows[i], i > 0 ? rows[i - 1] : null, deps, { frozenTracker }));
     for (let k = n; k < log.entries.length; k++) log.entries[k].index = i;     // the row on which the episode was first seen
   }
   return log.entries

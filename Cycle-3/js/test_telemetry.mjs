@@ -278,7 +278,7 @@ assert.equal(hasFailure(resultAt('2026-09-16T07:03:00+05:30'), 'IMPROPER_OUTRIGG
 assert.equal(hasFailure(resultAt('2026-09-16T12:40:00+05:30'), 'IMPROPER_OUTRIGGER_DEPLOYMENT'), false);
 assert.equal(resultAt('2026-09-16T08:00:00+05:30').status, 'NORMAL');
 assert.equal(hasFailure(resultAt('2026-09-16T12:18:40+05:30'), 'NOT_PERMITTED'), true);
-assert.equal(hasFailure(resultAt('2026-09-16T10:25:27+05:30'), 'OUTRIGGER_NEAR_LIFT_OFF'), true);
+assert.equal(hasFailure(resultAt('2026-09-16T10:25:27+05:30'), 'OUTRIGGER_LIFT_OFF'), true);
 assert.equal(stabilityLossCount, 0, 'The known false stability alarms must be eliminated');
 
 for (const timestamp of [

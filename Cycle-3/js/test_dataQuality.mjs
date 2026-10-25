@@ -13,7 +13,8 @@ import { dirname, join } from 'path';
 import { parseCSV } from './playbackClock.js';
 import {
   QUALITY, LIMITS, assessSample, staticIssues, sequenceIssues,
-  expectedRadiusM, expectedHookHeightM, scanClockFaults, createFrozenSensorTracker,
+  expectedRadiusM, expectedHookHeightM, scanClockFaults,
+  createFrozenSensorTracker, createProductionFrozenSensorTracker,
 } from './dataQuality.js';
 
 let passed = 0, failed = 0;
@@ -160,6 +161,22 @@ check('parked constant value does not report without an active motion bit', (() 
     t.update({ ...frozenBase, ts: '2026-09-16T18:00:01+05:30', status_word: 0 }).length === 0 &&
     t.update({ ...frozenBase, ts: '2026-09-16T18:00:02+05:30', status_word: 0 }).length === 0 &&
     t.update({ ...frozenBase, ts: '2026-09-16T18:00:03+05:30', status_word: 0 }).length === 0;
+})());
+check('production tracker is wired to the shared provisional mapping and duration', (() => {
+  const t = createProductionFrozenSensorTracker();
+  const base = { ...frozenBase, status_word: 1 };
+  t.update(base);
+  t.update({ ...base, ts: '2026-09-16T18:00:01+05:30' });
+  t.update({ ...base, ts: '2026-09-16T18:00:02+05:30' });
+  return t.update({ ...base, ts: '2026-09-16T18:00:03+05:30' })
+    .some((issue) => issue.code === 'FROZEN_SENSOR' && issue.field === 'boom_length_m');
+})());
+check('invalid production timestamp resets frozen tracking', (() => {
+  const t = createProductionFrozenSensorTracker();
+  const base = { ...frozenBase, status_word: 1 };
+  t.update(base);
+  t.update({ ...base, ts: '' });
+  return t.update({ ...base, ts: '2026-09-16T18:00:01+05:30' }).length === 0;
 })());
 
 

@@ -1,5 +1,6 @@
 // loadchart.js — Grove GMK5250L-1 Mobile Crane Load Chart
 // Source: https://www.manitowoc.com/media/15016/download
+// Local reference: ./Grove-GMK5250L-1-load-chart.pdf (official download)
 // Config : Full outriggers (7.8 m spread), 80 t counterweight, 360° slew, EN 13000
 // ─────────────────────────────────────────────────────────────────────────────────
 // HOW TO READ THIS TABLE
@@ -30,7 +31,7 @@ export const CHART = {
     /* boom 23.6 */ [111.0, 83.5,  68.0,  57.0,  45.0,  27.0,  null ],
     /* boom 38.0 */ [ 59.0, 58.5,  53.0,  47.5,  40.0,  30.5,  17.2 ],
     /* boom 52.4 */ [ null, null,  31.0,  31.0,  28.5,  23.5,  15.0 ],
-    /* boom 70.0 */ [ null, null,  null,  14.5,  14.5,  14.5,  12.1 ],
+    /* boom 70.0 */ [ null, null,  null,  14.5,  14.5,  14.5,  12.1 ], // PDF p.17: 70 m / 30 m = 12.1 t
   ],
 };
 
