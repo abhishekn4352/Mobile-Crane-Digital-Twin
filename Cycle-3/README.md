@@ -603,8 +603,6 @@ Notes on the two integration rows:
 
 **Module Owner: Abhishek**
 
-(Paste this over the existing "Module 4" section of `Cycle-3/README.md`.)
-
 ### 1. Module Responsibility
 
 The Sensor Panel & Alarm UI module shows the state of the crane and its alarms, and a 3D view of the crane. It only shows data. It does not calculate chart or stability values itself.
@@ -612,13 +610,11 @@ The Sensor Panel & Alarm UI module shows the state of the crane and its alarms, 
 - Sensor panel from the active telemetry sample: load, boom angle, boom length, radius, slew, outrigger state, hydraulic pressure, wind, and the four pad reactions.
 - Rated capacity, utilisation and stability verdict, taken from the failure detector's `derived` block, which gets them from Module 3 (`js/craneModel.js`, over the Cycle-2 chart and stability code). No second copy of chart or stability code: the kit constants, the radius formula, the support polygon and the ground position of the load are imported from `craneModel.js`.
 - A **LIVE / MANUAL switch** in the control dock, and a **LIVE (telemetry) / MANUAL (override)** badge that is always visible. In LIVE the dock shows only the playback controls (play / pause, speed, position, jump) and no sliders. In MANUAL it shows only the sliders and no playback controls; the recording is paused, the badge turns amber and alarms are labelled SIMULATED. The LIVE button (or "Return to LIVE" in the header) goes back and carries on from the same row.
-- A **data-quality** badge: `OK` / `STALE` (dropout or repeated timestamp) / `BAD DATA` (an impossible row). BAD DATA and STALE are shown as data problems, never as crane failures.
+- A **data-quality** badge: `OK` / `STALE` (dropout, repeated timestamp, or a frozen sensor) / `BAD DATA` (an impossible row). BAD DATA and STALE are shown as data problems, never as crane failures.
 - **NO DATA · dropout in progress**: the clock follows the CSV's own `ts`, so inside the 15:20:00–15:24:59 gap it publishes nothing. The panel then says NO DATA, counts the seconds up to the next sample, and greys the sensor values (they are the last ones received).
-- Frozen-sensor state is not reported by the live panel until the mentor
-  confirms the motion-bit mapping and duration; enabling it prematurely could
-  turn valid quantized or plateaued readings into false data-quality alarms.
 - An **alarm list**: one latched entry per alarm episode, with the alarm type, the triggering value, the rule that fired and the **first timestamp** at which it became true. Active alarms are highlighted, cleared ones greyed.
 - Device chips from `status_word` and wind: WIND ALERT, LMI BYPASS, LMI PRE-WARN, A2B.
+- Every alarm is classed as **critical** (a crane failure), **warning** (a device condition or an early warning) or **data** (a problem with the data, not the crane). See the table in §4.
 - **NOT PERMITTED** instead of a number when the chart has no capacity.
 - A 3D view (`js/crane3d.js`) driven by the same sample: boom length and angle, slew, outrigger deployment, hook height, and a load that **sways with the wind**.
 - A list of clock faults in the CSV (file order): the 15:20–15:25 dropout and the repeated / backwards timestamps.
@@ -633,7 +629,7 @@ Look and feel: dark graphite, off-white, crane yellow; the CSS variables `--dark
 | `simulator.html` | The page: sensors, 3D view, LIVE / MANUAL switch with its playback controls and sliders, alarm list, clock faults |
 | `js/panelModel.js` | Logic, no DOM: analyses a sample, keeps the alarm log, builds the text and colour of every element, `dropoutStatus` (NO DATA), `buildEventIndex` (the Jump list) |
 | `js/panel.js` | Draws the model into the page (`textContent` only) |
-| `js/dataQuality.js` | OK / STALE / BAD DATA rules and the file-order clock-fault scan |
+| `js/dataQuality.js` | OK / STALE / BAD DATA rules and the file-order clock-fault scan. Also holds the frozen-sensor tracker (`createFrozenSensorTracker`, `createProductionFrozenSensorTracker`): written by Rushikesh (`ab5e6b6`, `81d84cc`); in this commit it reports a frozen sensor as a STALE data issue, on every row while the freeze lasts, using the bits and duration in `KIT` |
 | `js/crane3d.js` | 3D crane (view only) and the wind sway |
 | `crane3d-demo.html` | Stand-alone page for the 3D view |
 | `js/test_sensorPanelUI.mjs`, `test_dataQuality.mjs`, `test_crane3d.mjs` | Tests |
@@ -641,8 +637,8 @@ Look and feel: dark graphite, off-white, crane yellow; the CSS variables `--dark
 ### 3. Inputs (interfaces with other modules)
 
 - Module 1 (Ajit): `PlaybackClock` (`currentIndex`, `playing`, `rate`, `jumpTo`, `setManual`, `setLive`, `pushManualSample`) and `parseCSV`. The clock advances by the real `ts` gap between rows.
-- Module 2 (Rushikesh): `detectFailures(sample, previousSample)` and `expectedHydraulicPressure`. The panel uses its alarms as they are (OVERLOAD, STABILITY_LOSS, OUTRIGGER_LIFT_OFF / NEAR_LIFT_OFF, HYDRAULIC_PRESSURE_LOSS, IMPROPER_OUTRIGGER_DEPLOYMENT, NOT_PERMITTED, WIND_ALERT, LMI_BYPASS, LMI_PREWARNING, LMI_DIVERGENCE, DEVICE_OVERLOAD, A2B_ALERT, DATA_QUALITY) and only classifies and words them.
-- Module 3 (Sujal): `craneModel.js` (`KIT`, `radiusFromAngle`, `supportPolygon`, `loadGroundPosition`); the chart and stability numbers themselves reach the panel through the detector.
+- Module 2 (Rushikesh): `detectFailures(sample, previousSample)` and `expectedHydraulicPressure`. The panel uses the alarms as they are (OVERLOAD, STABILITY_LOSS, OUTRIGGER_LIFT_OFF / NEAR_LIFT_OFF, HYDRAULIC_PRESSURE_LOSS, IMPROPER_OUTRIGGER_DEPLOYMENT, NOT_PERMITTED, FROZEN_SENSOR, WIND_ALERT, LMI_BYPASS, LMI_PREWARNING, LMI_DIVERGENCE, DEVICE_OVERLOAD, A2B_ALERT, DATA_QUALITY) and only classifies and words them.
+- Module 3 (Sujal): `craneModel.js` (`KIT`, `SAFETY_LIMITS`, `expectedHookHeightM`, `radiusFromAngle`, `supportPolygon`, `loadGroundPosition`); the chart and stability numbers themselves reach the panel through the detector. The data-quality limits (85° angle limit, motion-rate limits, hook-height formula and minimum, radius / hook / pad-sum tolerances) are `SAFETY_LIMITS` constants in `craneModel.js`: `dataQuality.js` and the detector both import them, so neither keeps its own copy.
 
 What the panel does before calling the detector:
 
@@ -662,27 +658,24 @@ What the panel does before calling the detector:
 ### 5. Testing
 
 ```
-node Cycle-3/js/test_sensorPanelUI.mjs     # 129 checks
-node Cycle-3/js/test_dataQuality.mjs       # 49 checks
+node Cycle-3/js/test_sensorPanelUI.mjs     # 144 checks
+node Cycle-3/js/test_dataQuality.mjs       # 51 checks
 node Cycle-3/js/test_crane3d.mjs           # 51 checks
 ```
 
-`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads, the whole day at 3 rows per frame (50 entries with the fixed parser), the NO DATA state during a dropout, the derived Jump list (true first timestamps), what is passed to the detector, and that nothing throws. The page itself was checked in a headless browser (26 checks, no console errors): what is visible in LIVE (playback only) and in MANUAL (sliders only), the derived Jump list, MANUAL ↔ LIVE, overload, BAD DATA, NOT PERMITTED, wind, and playing into the dropout.
+`test_sensorPanelUI.mjs` runs the real kit CSV through the real detector, and passes with the current `parseCSV` and with a fixed one. It checks that each field changes with the sample, the mode badge, the alarm list (type, value, rule, first timestamp, no repeats, same first timestamp at any playback speed), blank LMI, NOT PERMITTED, BAD DATA, STALE, device conditions, pads (the 0.02 t pad at 10:25:27 is red), the whole day at 3 rows per frame (35 entries), the NO DATA state during a dropout, the derived Jump list (true first timestamps), the classification of the review alarms (a frozen sensor is STALE and the real alarm on the same row stays, lift-off keeps one near-lift-off entry, blank LMI, with a stub detector), the frozen-sensor tracker on the real file (11 windows, none at 07:03 or in the dropout), and that nothing throws. The page itself was checked by hand in a browser (LIVE shows playback only, MANUAL shows sliders only, the Jump list, MANUAL and back, overload, BAD DATA, NOT PERMITTED, wind, the lift-off at 10:25:27, the LMI blank at 12:18:00, playing into the dropout); that check is not automated and is not part of the repo.
 
-Whole-day alarm log (50 entries with the current parser): the production frozen-sensor data-quality episodes are included and split overlapping detector episodes when a provisional motion bit remains active while its mapped value is unchanged. The impossible rows remain BAD DATA, blank LMI boundary rows remain data-quality/device conditions rather than confirmed failures, and the F6 pad window contains warning near-lift-off episodes plus the mentor-requested critical lift-off episode.
+Whole-day alarm log (35 entries): improper deployment 07:03:00 · overload 09:00:00 · overload + LMI divergence 09:50:00 · near lift-off 10:25:20 · lift-off 10:25:27 · overload 11:00:00 · hydraulic loss 11:00:01 · NOT PERMITTED 12:18:40 · wind 12:30:00 · LMI bypass 14:00:00 · pre-warning ×4 (14:09:58, 14:19:58, 14:39:58, 14:49:58) · data problems: BAD DATA ×4 (14:30:00, 15:00:00, 15:30:00, 17:00:00), LMI BLANK ×2 (12:18:00, 12:19:50), dropout 15:25:00, repeated timestamp 15:59:49, dropout 16:00:02, frozen sensor ×11 (09:00:10, 09:50:10, 10:25:10, 11:00:10, 12:18:50, 12:30:10, 14:00:10, 14:10:10, 14:20:10, 14:40:10, 14:50:10). With the old `parseCSV` (blank read as 0) the two LMI BLANK entries are missing.
 
-### 6. Module 4 source notes
+### 6. Real vs Faked
 
-The panel displays recorded telemetry and detector results. MANUAL controls,
-the approximate 3D proportions, hook visualization, and wind sway remain
-simulated or visual-only; the panel does not create additional telemetry.
-The consolidated Real vs Faked and source-verification table at the top is
-the authoritative classification summary.
+See the single table at the top of this README. The Module 4 rows are: panel fields (real), alarm list (real), classification (our own rule), data-quality limits (from `SAFETY_LIMITS`), MANUAL values (simulated), 3D geometry and hook position (visual only), wind sway (faked, assumed numbers).
 
 ### 7. Known limits
 
 - The NO DATA seconds are an estimate (wall time × playback rate): the clock does not publish its position inside a gap. It is for display only; the alarm log and the first timestamps never use it.
 - The detector gets one row at a time and has no time rule, so it does not report a dropout, a repeated or a backwards timestamp. Module 4 reports them (`dataQuality.js`: STALE). See the fault list, class C.
 - `parseCSV` sorts by `ts`, so the backwards step 15:59:59 → 15:59:49 is not visible in the sorted rows. Module 4 finds it from the raw file text in file order (`scanClockFaults`).
-- The 12:18:00 and 12:19:50 rows (boom 45.6 m, radius 10.00 m): the chart gives 41.4 t, the device LMI is blank. Open question for Module 3: is r = 10 m permitted for this boom?
+- The 12:18:00 and 12:19:50 rows (boom 45.6 m, radius 10.00 m): the chart gives 41.4 t, the device LMI is blank. Module 3 §2 says r = 10 m is a charted cell for this boom, so the chart is right and the device is at an edge; the panel shows it as a data issue (LMI BLANK).
+- The 11 frozen-sensor windows all lie inside the lift windows of the real events (09:00, 09:50, 10:25, 11:00, 12:18:40, 12:30, 14:00, 14:10, 14:20, 14:40, 14:50): the status word says telescope, luff and slew are running while the three readings do not change. In this synthetic file we cannot tell a deliberate sensor freeze from the generator holding the boom still while it keeps the motion bits on. The rule is justified by what it separates (ordinary stalls last at most 2 s, these windows 30 s or more), and it is reported as a data problem, not as a crane failure.
 - In MANUAL the pads, the device LMI and the status word are not simulated.
