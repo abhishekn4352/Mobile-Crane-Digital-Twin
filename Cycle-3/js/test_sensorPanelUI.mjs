@@ -31,9 +31,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rows = parseCSV(fs.readFileSync(join(__dirname, '../data/mobile-telemetry-2026-09-16.csv'), 'utf8'));
 const deps = { detect: detectFailures, expectedPressure: expectedHydraulicPressure };
 // Whole-day numbers: 21 core entries + 2 LMI BLANK (when the parser gives NaN for a blank cell)
-// + 1 lift-off (pad 0.02 t <= 0.1 t) + 11 frozen-sensor windows (motion bit set, reading unchanged for KIT.FROZEN_SENSOR_DURATION_S).
+// + 1 lift-off (pad 0.02 t <= 0.1 t). No frozen-sensor entry: the recording has none (its 11 held lifts have the motion bits set
+// but no axis moves, so nothing is frozen against anything; see test_dataQuality.mjs).
 const BLANKS_NAN = Number.isNaN(rows[rows.findIndex((r) => r.ts.includes('T12:18:40'))].lmi_pct);
-const EXPECTED_ENTRIES = 21 + (BLANKS_NAN ? 2 : 0) + 1 + 11;
+const EXPECTED_ENTRIES = 21 + (BLANKS_NAN ? 2 : 0) + 1;
 const idx = (hms) => rows.findIndex((r) => r.ts.includes('T' + hms));
 const fresh = () => new PanelSession(rows, deps);
 const types = (vm) => vm.alarms.map((a) => a.type);
@@ -255,14 +256,8 @@ console.log('\n=== WHOLE DAY at 3 rows per frame ===');
   const lo = v.alarms.find((a) => a.type === 'OUTRIGGER LIFT OFF');
   check('...first timestamp 10:25:27, critical, trigger FL', lo && lo.first === '10:25:27' && lo.severity === 'critical' && /FL/.test(lo.valueText), JSON.stringify(lo && [lo.first, lo.severity, lo.valueText]));
   check('one near-lift-off entry runs through the lift-off (10:25:20), not two', count('OUTRIGGER NEAR LIFT OFF') === 1 && v.alarms.find((a) => a.type === 'OUTRIGGER NEAR LIFT OFF').first === '10:25:20');
-  const fz = v.alarms.filter((a) => a.type === 'SENSOR FROZEN');
-  check('11 frozen-sensor entries, none while parked or in a dropout, none at 07:03 (hoist only)',
-    fz.length === 11 && fz.every((a) => !/^(07:0|12:4|15:2)/.test(a.first)), String(fz.length));
-  const fzFirst = fz.map((a) => a.first).sort().join();
-  check('frozen-sensor first timestamps = window start + KIT.FROZEN_SENSOR_DURATION_S (10 s)',
-    KIT.FROZEN_SENSOR_DURATION_S === 10 && fzFirst === '09:00:10,09:50:10,10:25:10,11:00:10,12:18:50,12:30:10,14:00:10,14:10:10,14:20:10,14:40:10,14:50:10', fzFirst);
-  check('a frozen sensor is a data problem (severity data), not a crane failure; the entry names the channels',
-    fz.every((a) => a.severity === 'data' && a.kind === 'data' && /boom length/.test(a.valueText)));
+  check('no SENSOR FROZEN entry on the whole day: the 11 held lifts (motion bits set, nothing moving), the parked periods and the dropout are all silent',
+    count('SENSOR FROZEN') === 0, String(count('SENSOR FROZEN')));
   check('4 BAD DATA entries', count('BAD DATA') === 4, String(count('BAD DATA')));
   check('2 dropout entries (15:25:00 and 16:00:02)', count('DROPOUT') === 2, String(count('DROPOUT')));
   // With blanks as NaN the detector also sees the two single rows where the device is blank but the chart has a capacity
@@ -387,17 +382,27 @@ console.log('\n=== REVIEW FIXES: how the panel classifies the new / changed dete
   const stub = (failures) => ({ detect: () => ({ timestamp: sample.ts, status: 'FAILURE_DETECTED', errors: [], failures, telemetry: {}, derived: detectFailures(sample).derived }), expectedPressure: expectedHydraulicPressure });
   const f = (type, triggerValue, limit, rule) => ({ type, timestamp: sample.ts, triggerValue, limit, rule });
 
-  // frozen sensor -> STALE badge + a data entry, not a crane failure, and the real alarm on the same row stays visible
-  const w = idx('09:00:20');                         // inside the 09:00 window: overload AND frozen at the same time
+  // frozen sensor -> STALE badge + a data entry, not a crane failure, and the real alarm on the same row stays visible.
+  // The real recording has no frozen sensor (checked above), so this uses an in-memory copy of the 09:00 overload rows in which
+  // the boom length and the slew creep by a hair every second (the crane is moving) while the boom angle sensor keeps its value.
+  const k0 = idx('09:00:00');
+  const frozenRows = rows.slice(k0, k0 + 21).map((r, n) => ({ ...r, boom_length_m: r.boom_length_m + 0.001 * n, slew_deg: r.slew_deg + 0.01 * n }));
   const tracker = createProductionFrozenSensorTracker();
   let fa = null;
-  for (let k = idx('09:00:00'); k <= w; k++) fa = analyseSample(rows[k], rows[k - 1], deps, { frozenTracker: tracker });
+  frozenRows.forEach((r, n) => { fa = analyseSample(r, n ? frozenRows[n - 1] : null, deps, { frozenTracker: tracker }); });
   check('FROZEN: quality is STALE, not BAD DATA', fa.quality.level === 'STALE', fa.quality.level);
   check('FROZEN: the real OVERLOAD on the same row is still a crane failure', fa.failures.some((x) => x.type === 'OVERLOAD'), JSON.stringify(fa.failures.map((x) => x.type)));
   const fr = fa.raised.find((r) => r.type === 'SENSOR_FROZEN');
-  check('FROZEN: ONE data entry for the three channels, with the 10 s limit', fa.raised.filter((r) => r.type === 'SENSOR_FROZEN').length === 1 && fr.kind === 'data' && fr.severity === 'data' && /boom length/.test(String(fr.value)) && /10 s/.test(fr.limit), JSON.stringify(fr));
+  check('FROZEN: ONE data entry, naming only the stuck channel (boom angle), with the 10 s limit',
+    fa.raised.filter((r) => r.type === 'SENSOR_FROZEN').length === 1 && fr.kind === 'data' && fr.severity === 'data' && /boom angle/.test(String(fr.value)) && !/boom length|slew/.test(String(fr.value)) && /10 s/.test(fr.limit), JSON.stringify(fr));
   const fvm = buildPanelModel(fa, new AlarmLog(), MODE.LIVE);
   check('FROZEN: the badge reads STALE and the banner is not the BAD DATA banner', fvm.quality.text === 'STALE' && fvm.banner.text !== 'BAD DATA', JSON.stringify([fvm.quality.text, fvm.banner]));
+  // the same rows without the frozen angle (the real, moving angle) raise no frozen entry
+  const movingRows = frozenRows.map((r, n) => ({ ...r, boom_angle_deg: r.boom_angle_deg + 0.001 * n }));
+  const tracker2 = createProductionFrozenSensorTracker();
+  let ma = null;
+  movingRows.forEach((r, n) => { ma = analyseSample(r, n ? movingRows[n - 1] : null, deps, { frozenTracker: tracker2 }); });
+  check('FROZEN: with the angle moving too, nothing is frozen and the badge is not STALE', !ma.raised.some((r) => r.type === 'SENSOR_FROZEN') && ma.quality.level !== 'STALE', ma.quality.level);
 
   // lift-off is critical, and a lifted pad also keeps the near-lift-off episode open (no split into two entries)
   const la = analyseSample(sample, null, stub([f('OUTRIGGER_LIFT_OFF', 'FL', '> 0.1 t reaction on every deployed pad', 'recorded pad reaction is at or below 0.1 t on FL')]));

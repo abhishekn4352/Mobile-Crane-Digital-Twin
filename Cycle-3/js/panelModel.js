@@ -235,7 +235,7 @@ export function analyseSample(sample, prev, deps, opts = {}) {
     const names = frozen.map((i) => FROZEN_NAME[i.field] || i.field).join(', ');
     raised.push({
       kind: 'data', type: 'SENSOR_FROZEN', severity: 'data', value: names, limit: `${KIT.FROZEN_SENSOR_DURATION_S} s`,
-      rule: `${names} read exactly the same for at least ${KIT.FROZEN_SENSOR_DURATION_S} s while the motion bit says the crane is moving`,
+      rule: `${names} read exactly the same for at least ${KIT.FROZEN_SENSOR_DURATION_S} s while its motion bit is set and another axis keeps moving`,
       note: 'sensor or reporting problem, not a crane failure',
     });
   }

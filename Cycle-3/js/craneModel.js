@@ -86,22 +86,40 @@ export const KIT = Object.freeze({
   }),
 
   PAD_ORDER: Object.freeze(['fl', 'fr', 'rl', 'rr']),
-  // TEAM rule requested by the Cycle 3 mentor: a finite deployed-pad
-  // reaction at or below this value is classified as critical lift-off.
+  // TEAM rule from the Cycle 3 review (about 0.1 t): a finite deployed-pad reaction at or
+  // below this value is critical lift-off. From the pad sensor noise in the recording: the pad
+  // readings differ from the kit reaction formula by sigma 0.0034 t and at most 0.0243 t over 127,196
+  // readings (the step is 0.01 t), so a pad that carries nothing can still read up to ~0.025 t.
+  // 0.1 t is four times that largest error: noise never raises it. The lowest pad on any other loaded
+  // row is 17.4 t, so a larger threshold would also be safe; the real event reads 0.02 t (10:25:27).
   PAD_LIFT_OFF_T: 0.1,
   PAD_NEAR_LIFT_T: 5,
   WARN_MARGIN_M: DEFAULT_WARN_MARGIN_M,
 
-  // The recording documents bits 0-3 only as a coarse motion group.  These
-  // one-to-one mappings are provisional TEAM assumptions for data-quality
-  // monitoring, not manufacturer specifications.
+  // Frozen-sensor rule (dataQuality.js). A motion sensor is "frozen" when it reads
+  // exactly the same value for FROZEN_SENSOR_DURATION_S while its own status bit says
+  // that axis is moving AND another axis is visibly moving at the same time.
+  //
+  // Bits: sir's kit README-for-students.md section 3 (1 telescope, 2 luff, 3 slew; bit 0
+  // is the hoist). Checked against the recording: outside the 11 held-lift windows, whenever
+  // bit 1 / 3 is set the boom length / slew reading changes on every row (7,844 and 7,866 rows);
+  // bit 2 / boom angle on 97.6 % of 7,844 rows (the rest are stalls of at most 2 s).
+  // The hoist (bit 0) has no sensor of its own in this list.
   FROZEN_SENSOR_MAPPINGS: Object.freeze([
     Object.freeze({ field: 'boom_length_m', bit: 1 }),
     Object.freeze({ field: 'boom_angle_deg', bit: 2 }),
     Object.freeze({ field: 'slew_deg', bit: 3 }),
   ]),
-  // TEAM noise/duration choice pending an authoritative sensor mapping.
+  // TEAM threshold, from the recording: while its bit is set a moving axis never stays the same for
+  // more than 2 s (3 equal rows in a row: the boom angle 20 times, e.g. at 10:59:29; boom length and slew
+  // never repeat at all). Any duration from 3 s to 60 s gives zero frozen sensors on the recording, 2 s gives
+  // 20 false episodes. 10 s is five times the longest ordinary stall and about one sixth of the shortest
+  // movement stage (59 s).
   FROZEN_SENSOR_DURATION_S: 10,
+  // TEAM: the other axis must have changed on at least this share of the last
+  // FROZEN_SENSOR_DURATION_S seconds. In the recording a moving axis changes on every row
+  // (100 %) and a held lift on none (0 %): any value from 0.1 to 1 gives the same result.
+  FROZEN_SENSOR_MOVING_FRACTION: 0.5,
 });
 
 export const SAFETY_LIMITS = Object.freeze({

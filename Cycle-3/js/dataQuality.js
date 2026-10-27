@@ -1,3 +1,23 @@
+// ============================================================
+// Cycle 3 - Mobile Crane Digital Twin
+// Module 4 helper - Data quality (OK / STALE / BAD DATA)
+//
+// Owner: Abhishek
+//
+// Why this exists
+//   Sir's kit README: "The file contains both real crane failures and
+//   impossible rows, but do not assume that every alarming row is a
+//   real failure. Handle the missing telemetry interval as a dropout."
+//   The failure detector decides about crane failures. This file decides
+//   whether a SAMPLE can be trusted at all, so the panel can show a
+//   data-quality problem instead of a crane alarm.
+//
+// Pure functions. No DOM, no THREE, no chart or stability code.
+// Every limit is labelled with where it comes from:
+//   KIT  = stated in or derived from sir's README
+//   TEAM = our own choice, not from sir
+// ============================================================
+
 import {
   KIT,
   SAFETY_LIMITS,
@@ -45,13 +65,28 @@ export { expectedHookHeightM };
 /**
  * Build a frozen-sensor tracker from an explicit mapping and duration.
  *
- * The generic helper remains configurable so tests and future integrations do
- * not silently inherit the provisional production assumptions in KIT.
+ * A channel is reported as frozen on a row when ALL of these hold:
+ *   1. its own status bit (mapping.bit) is set, i.e. the device says that axis is moving;
+ *   2. its reading has been exactly the same for at least `durationS` seconds;
+ *   3. only when `movingFraction` > 0: another mapped axis (its own bit set) is visibly moving,
+ *      i.e. its reading changed on at least `movingFraction` of the last `durationS` seconds.
+ *
+ * Rule 3 is what separates a frozen sensor from a held lift. In the recording the motion bits
+ * 1-3 stay set while the crane holds the boom still and lifts a load (11 stretches, 31 to 241 s);
+ * there NO axis moves, so nothing is frozen against anything. A really frozen sensor reads
+ * constant while the other axes keep moving. Pass movingFraction 0 (the default) to switch rule
+ * 3 off (only tests of the bare helper do that).
+ *
+ * The tracker is stateful (one instance per playback) and resets on a gap longer than
+ * LIMITS.gapS, a repeated or backwards timestamp, a missing value, or a cleared bit.
  */
-export function createFrozenSensorTracker({ mappings, durationS } = {}) {
+export function createFrozenSensorTracker({ mappings, durationS, movingFraction = 0 } = {}) {
   if (!Array.isArray(mappings) || mappings.length === 0 ||
       !Number.isFinite(durationS) || durationS <= 0) {
     throw new TypeError('frozen-sensor mappings and a positive durationS are required');
+  }
+  if (!Number.isFinite(movingFraction) || movingFraction < 0 || movingFraction > 1) {
+    throw new TypeError('movingFraction must be a number from 0 to 1');
   }
   for (const mapping of mappings) {
     if (!mapping || typeof mapping.field !== 'string' ||
@@ -60,7 +95,9 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
     }
   }
 
-  const active = new Map();
+  // Seconds are counted in whole rows at 1 Hz: the recording has one row per second.
+  const neededChanges = movingFraction > 0 ? Math.max(1, Math.ceil(movingFraction * durationS)) : 0;
+  const active = new Map();      // field -> { value, elapsedS, changeTimes: [seconds] }
   let previousTimestamp = null;
 
   const reset = () => {
@@ -78,9 +115,10 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
     }
 
     const seconds = previousTimestamp === null ? 0 : (timestamp - previousTimestamp) / 1000;
+    const nowS = timestamp / 1000;
     previousTimestamp = timestamp;
-    const issues = [];
 
+    // Pass 1: update every channel (value held, or changed).
     for (const mapping of mappings) {
       const key = mapping.field;
       if (!statusBitSet(sample.status_word, mapping.bit) ||
@@ -88,25 +126,44 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
         active.delete(key);
         continue;
       }
-
       const prior = active.get(key);
-      if (!prior || sample[key] !== prior.value) {
-        active.set(key, { value: sample[key], elapsedS: 0 });
-        continue;
+      if (!prior) {
+        active.set(key, { value: sample[key], elapsedS: 0, changeTimes: [] });
+      } else if (sample[key] !== prior.value) {
+        prior.value = sample[key];
+        prior.elapsedS = 0;
+        prior.changeTimes.push(nowS);
+      } else {
+        prior.elapsedS += seconds;
       }
+      const state = active.get(key);
+      while (state.changeTimes.length && state.changeTimes[0] <= nowS - durationS) state.changeTimes.shift();
+    }
 
-      prior.elapsedS += seconds;
-      if (prior.elapsedS >= durationS) {
-        // Reported on every row while the freeze goes on, so the panel shows one alarm entry that stays
-        // active until the sensor moves again (or the motion bit clears). It is a STALE data problem:
-        // it must not hide a real crane alarm on the same row (kind 'bad' would).
-        issues.push({
-          code: 'FROZEN_SENSOR',
-          field: key,
-          kind: 'stale',
-          text: `${key} remained ${sample[key]} while status_word bit ${mapping.bit} was active for at least ${durationS} s`,
-        });
+    // Pass 2: which channels are frozen on this row.
+    const issues = [];
+    for (const mapping of mappings) {
+      const key = mapping.field;
+      const state = active.get(key);
+      if (!state || state.elapsedS < durationS) continue;
+      let movingOthers = [];
+      if (neededChanges > 0) {
+        movingOthers = mappings
+          .filter((other) => other.field !== key)
+          .filter((other) => (active.get(other.field)?.changeTimes.length ?? 0) >= neededChanges)
+          .map((other) => other.field);
+        if (movingOthers.length === 0) continue;       // nothing else moves: a held lift, not a frozen sensor
       }
+      // Reported on every row while the freeze goes on, so the panel shows one alarm entry that stays
+      // active until the sensor moves again (or the motion bit clears). It is a STALE data problem:
+      // it must not hide a real crane alarm on the same row (kind 'bad' would).
+      issues.push({
+        code: 'FROZEN_SENSOR',
+        field: key,
+        kind: 'stale',
+        text: `${key} remained ${sample[key]} for at least ${durationS} s while status_word bit ${mapping.bit} said it was moving` +
+          (movingOthers.length ? ` and ${movingOthers.join(', ')} kept changing` : ''),
+      });
     }
     return issues;
   };
@@ -115,10 +172,25 @@ export function createFrozenSensorTracker({ mappings, durationS } = {}) {
 }
 
 
+/**
+ * Create the frozen-sensor tracker the panel uses: one instance that spans the
+ * whole recording, with the mappings and numbers from craneModel.js:
+ *   KIT.FROZEN_SENSOR_MAPPINGS        boom length -> bit 1 (telescope), boom angle -> bit 2 (luff),
+ *                                     slew angle -> bit 3 (slew); sir's kit README section 3
+ *   KIT.FROZEN_SENSOR_DURATION_S      10 s: five times the longest ordinary stall of a moving axis in the recording (2 s)
+ *   KIT.FROZEN_SENSOR_MOVING_FRACTION another axis must have changed on half of those 10 s
+ * It reports a STALE issue on every row while a freeze lasts (not BAD DATA, which would hide the real crane alarm).
+ * It is silent in a dropout, on a repeated or backwards timestamp, while the motion bit is clear, and during a
+ * held lift (bits set but no axis moves). Reset it whenever the playback position jumps, so a seek does not
+ * carry a freeze across.
+ *
+ * @returns {{ update(sample): Issue[], reset(): void }}
+ */
 export function createProductionFrozenSensorTracker() {
   return createFrozenSensorTracker({
     mappings: Array.from(KIT.FROZEN_SENSOR_MAPPINGS),
     durationS: KIT.FROZEN_SENSOR_DURATION_S,
+    movingFraction: KIT.FROZEN_SENSOR_MOVING_FRACTION,
   });
 }
 
@@ -126,6 +198,10 @@ const bad = (code, field, text) => ({ code, field, kind: 'bad', text });
 const stale = (code, field, text) => ({ code, field, kind: 'stale', text });
 
 
+/**
+ * Problems that live in ONE sample (no previous sample needed).
+ * Returns an array of issues; empty when the sample is self-consistent.
+ */
 export function staticIssues(sample) {
   const issues = [];
   if (sample == null || typeof sample !== 'object') {
@@ -174,6 +250,10 @@ export function staticIssues(sample) {
   return issues;
 }
 
+/**
+ * Problems between this sample and the one before it: timestamps and motion rates.
+ * `prev` is the sample one row earlier in the recording (or null).
+ */
 export function sequenceIssues(sample, prev) {
   const issues = [];
   if (!prev) return issues;

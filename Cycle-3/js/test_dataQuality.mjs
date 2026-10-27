@@ -110,7 +110,7 @@ check('limits are frozen (cannot be changed by accident)', Object.isFrozen(LIMIT
 
 console.log('\n=== OPT-IN FROZEN-SENSOR HELPER (SYNTHETIC CONTRACT TESTS) ===');
 // These tests exercise the generic state machine only. The bit-to-field mapping
-// and 3-second interval are synthetic inputs, not approved production settings.
+// and the 3-second interval are synthetic inputs, not the production settings.
 const frozenBase = {
   ts: '2026-09-16T18:00:00+05:30',
   status_word: 1,
@@ -166,21 +166,15 @@ check('parked constant value does not report without an active motion bit', (() 
     t.update({ ...frozenBase, ts: '2026-09-16T18:00:03+05:30', status_word: 0 }).length === 0;
 })());
 const stepTs = (i) => new Date(Date.parse(frozenBase.ts) + i * 1000).toISOString();
-const runProduction = (statusWord, seconds) => {
-  const t = createProductionFrozenSensorTracker();
-  const out = [];
-  for (let i = 0; i <= seconds; i++) out.push(t.update({ ...frozenBase, ts: stepTs(i), status_word: statusWord }));
-  return out;
-};
 const D = KIT.FROZEN_SENSOR_DURATION_S;
 check('production mapping follows the kit README: bit 1 telescope -> boom length, bit 2 luff -> boom angle, bit 3 slew -> slew',
   JSON.stringify(KIT.FROZEN_SENSOR_MAPPINGS.map((m) => [m.field, m.bit])) ===
   JSON.stringify([['boom_length_m', 1], ['boom_angle_deg', 2], ['slew_deg', 3]]));
-check(`production tracker: telescope running (bit 1) reports boom length at ${D} s and not one second earlier`, (() => {
-  const r = runProduction(2, D);
-  return r[D - 1].length === 0 && r[D].some((x) => x.field === 'boom_length_m' && x.kind === 'stale');
+check('a running HOIST (bit 0 only) never reports a frozen boom sensor', (() => {
+  const t = createProductionFrozenSensorTracker();
+  for (let i = 0; i < D + 20; i++) if (t.update({ ...frozenBase, ts: stepTs(i), status_word: 1 }).length) return false;
+  return true;
 })());
-check('production tracker: a running HOIST (bit 0 only) never reports a frozen boom sensor', runProduction(1, D + 20).every((r) => r.length === 0));
 check('invalid production timestamp resets frozen tracking', (() => {
   const t = createProductionFrozenSensorTracker();
   const base = { ...frozenBase, status_word: 1 };
@@ -188,6 +182,129 @@ check('invalid production timestamp resets frozen tracking', (() => {
   t.update({ ...base, ts: '' });
   return t.update({ ...base, ts: '2026-09-16T18:00:01+05:30' }).length === 0;
 })());
+
+
+console.log('\n=== FROZEN SENSOR: STILL WHILE ANOTHER AXIS MOVES (SYNTHETIC CONTRACT TESTS) ===');
+// Two axes, both with a bit set. A channel is frozen only if the other axis changed on at least
+// movingFraction of the last durationS seconds. A held lift (nothing moves) is silent.
+const twoAxes = [{ field: 'boom_length_m', bit: 1 }, { field: 'slew_deg', bit: 3 }];
+const axisRows = (n, { lengthMoves, slewMoves }) => {
+  let length = 32, slew = 0;                      // an axis reading changes only on the rows where it "moves"
+  return Array.from({ length: n }, (_, i) => {
+    if (lengthMoves(i)) length += 0.1;
+    if (slewMoves(i)) slew += 0.5;
+    return { ts: stepTs(i), status_word: 0b1010, boom_length_m: length, slew_deg: slew };
+  });
+};
+const runRows = (tr, rs) => rs.map((r) => tr.update(r).map((x) => x.field));
+{
+  const tr = createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 0.5 });
+  const out = runRows(tr, axisRows(40, { lengthMoves: () => false, slewMoves: () => true }));
+  check('length still, slew moving: length is reported at 10 s, not before, and on every row after that',
+    out.slice(0, 10).every((x) => x.length === 0) && out.slice(10).every((x) => x.length === 1 && x[0] === 'boom_length_m'),
+    out.map((x) => x.length).join(''));
+}
+{
+  const tr = createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 0.5 });
+  const out = runRows(tr, axisRows(120, { lengthMoves: () => false, slewMoves: () => false }));
+  check('held lift: both bits set, neither axis moves for 120 s: nothing is reported', out.every((x) => x.length === 0));
+}
+{
+  const tr = createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 0.5 });
+  const out = runRows(tr, axisRows(40, { lengthMoves: () => false, slewMoves: (i) => i % 3 === 0 }));
+  check('the other axis changes on only a third of the rows (below one half): length is not reported', out.every((x) => x.length === 0));
+}
+{
+  const tr = createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 0.5 });
+  const out = runRows(tr, axisRows(40, { lengthMoves: () => false, slewMoves: (i) => i % 2 === 0 }));
+  check('the other axis changes on half of the rows: length is reported', out.slice(12).every((x) => x.includes('boom_length_m')));
+}
+{
+  const tr = createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 0.5 });
+  const rs = axisRows(40, { lengthMoves: () => false, slewMoves: () => true }).map((r, i) => (i >= 20 ? { ...r, status_word: 0b0010 } : r));
+  const out = runRows(tr, rs);
+  check('the other axis stops being "moving" (its bit clears): the freeze is no longer reported', out.slice(21).every((x) => x.length === 0));
+}
+{
+  const tr = createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 0.5 });
+  const rs = axisRows(40, { lengthMoves: () => false, slewMoves: () => true }).map((r, i) => (i >= 18 ? { ...r, ts: stepTs(i + 5) } : r));
+  const out = runRows(tr, rs);
+  // The row that shows the gap (row 18) only resets the tracker; counting starts on row 19, so the next report is row 29.
+  check('a 6 s gap in the timestamps (dropout) resets the freeze: reported again only 10 s after the gap',
+    out.slice(18, 29).every((x) => x.length === 0) && out[29].length === 1, out.map((x) => x.length).join(''));
+}
+check('movingFraction must be a number from 0 to 1', (() => {
+  try { createFrozenSensorTracker({ mappings: twoAxes, durationS: 10, movingFraction: 2 }); return false; } catch { return true; }
+})());
+check(`KIT: duration ${D} s and moving fraction ${KIT.FROZEN_SENSOR_MOVING_FRACTION} are the production values`,
+  D === 10 && KIT.FROZEN_SENSOR_MOVING_FRACTION === 0.5);
+
+
+console.log('\n=== FROZEN SENSOR ON THE REAL RECORDING ===');
+const HELD = [['09:00:00', 41], ['09:50:00', 41], ['10:25:00', 56], ['11:00:00', 241], ['12:18:40', 31], ['12:30:00', 41],
+  ['14:00:00', 41], ['14:10:00', 31], ['14:20:00', 31], ['14:40:00', 31], ['14:50:00', 31]].map(([t, n]) => [idxAt(t), idxAt(t) + n - 1]);
+const inHeld = (i) => HELD.some(([a, b]) => i >= a && i <= b);
+const bitOf = (r, b) => (r.status_word >> b) & 1;
+// (a) the bits: outside the held lifts a set bit means the axis really changes, so the kit README mapping is right
+{
+  const fields = { 1: 'boom_length_m', 2: 'boom_angle_deg', 3: 'slew_deg' };
+  for (const b of [1, 2, 3]) {
+    const f = fields[b];
+    let set = 0, still = 0, maxRepeat = 1, run = 1;
+    for (let i = 1; i < rows.length - 1; i++) {
+      if (inHeld(i) || !bitOf(rows[i], b)) { run = 1; continue; }
+      set++;
+      if (rows[i][f] === rows[i - 1][f] && rows[i][f] === rows[i + 1][f]) still++;
+      run = rows[i][f] === rows[i - 1][f] && bitOf(rows[i - 1], b) ? run + 1 : 1;
+      if (run > maxRepeat) maxRepeat = run;
+    }
+    check(`bit ${b} -> ${f}: outside held lifts the reading changes whenever the bit is set (${set} rows, ${still} rows with no change on either side, longest repeat ${maxRepeat} rows; the kit bit means the axis moves)`,
+      set > 7000 && still <= (b === 2 ? 20 : 0) && maxRepeat <= 3);
+  }
+}
+// (b) the held lifts are the ONLY rows where a motion bit 1-3 is set and nothing moves
+check('held lifts: 11 stretches, bits 1-3 all set, boom length, angle and slew do not change at all',
+  HELD.length === 11 && HELD.every(([a, b]) => {
+    for (let i = a; i <= b; i++) {
+      if (!(bitOf(rows[i], 1) && bitOf(rows[i], 2) && bitOf(rows[i], 3))) return false;
+      if (i > a && ['boom_length_m', 'boom_angle_deg', 'slew_deg'].some((f) => rows[i][f] !== rows[i - 1][f])) return false;
+    }
+    return true;
+  }));
+// (c) the production tracker on the whole day
+{
+  const tr = createProductionFrozenSensorTracker();
+  const hits = [];
+  rows.forEach((r) => { if (tr.update(r).length) hits.push(hms(r)); });
+  check('whole day: no frozen sensor is reported (the 11 held lifts, the parked periods and the dropout are all silent)', hits.length === 0, hits.slice(0, 5).join(','));
+}
+// (d) a frozen sensor injected into a copy of real rows (the file on disk is not touched)
+const inject = (fromH, toH, fields, freezeFromH, cut = []) => {
+  const a = idxAt(fromH), b = idxAt(toH), f = idxAt(freezeFromH);
+  let copy = rows.slice(a, b + 1).map((r) => ({ ...r }));
+  const base = copy[f - a];
+  for (let i = f - a; i < copy.length; i++) fields.forEach((k) => { copy[i][k] = base[k]; });
+  if (cut.length) copy = copy.filter((r) => !cut.includes(hms(r)));
+  const tr = createProductionFrozenSensorTracker();
+  const hits = {};
+  copy.forEach((r) => tr.update(r).forEach((x) => { (hits[x.field] = hits[x.field] || []).push(hms(r)); }));
+  return hits;
+};
+const span = (v) => (v ? `${v[0]}-${v[v.length - 1]}/${v.length}` : 'none');
+for (const [field, label] of [['boom_length_m', 'telescope'], ['boom_angle_deg', 'luff'], ['slew_deg', 'slew']]) {
+  const hits = inject('08:50:00', '08:51:00', [field], '08:50:30');
+  check(`injected: ${label} sensor (${field}) stuck from 08:50:30 while the sweep goes on: reported 08:50:40 to the end of the freeze, nothing else`,
+    Object.keys(hits).join() === field && span(hits[field]) === '08:50:40-08:51:00/21',
+    JSON.stringify(Object.fromEntries(Object.entries(hits).map(([k, v]) => [k, span(v)]))));
+}
+check('injected: a freeze of 9 s (08:50:30 to 08:50:38) is below the 10 s threshold and is not reported',
+  Object.keys(inject('08:50:00', '08:50:38', ['boom_angle_deg'], '08:50:30')).length === 0);
+check('injected: a freeze at the start of the approach (08:58:30), while the other axes move, is reported',
+  span(inject('08:58:10', '08:59:30', ['slew_deg'], '08:58:30').slew_deg) === '08:58:40-08:59:30/51');
+check('injected: a freeze that spans a 5 s dropout is reset by the gap and not reported for 10 s after it',
+  span(inject('07:15:10', '07:16:00', ['boom_length_m'], '07:15:20', ['07:15:30', '07:15:31', '07:15:32', '07:15:33', '07:15:34']).boom_length_m) === '07:15:46-07:16:00/15');
+check('injected, limit of the rule: all three axes stuck together in a sweep look like a held lift and are NOT reported',
+  Object.keys(inject('08:50:00', '08:51:00', ['boom_length_m', 'boom_angle_deg', 'slew_deg'], '08:50:30')).length === 0);
 
 
 console.log('\n==============================================');
