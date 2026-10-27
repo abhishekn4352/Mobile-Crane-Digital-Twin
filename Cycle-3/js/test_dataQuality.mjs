@@ -4,7 +4,7 @@
 //     node Cycle-3/js/test_dataQuality.mjs
 //
 // Checks the OK / STALE / BAD DATA decision on the real kit CSV.
-// The expected rows come from the fault list (FAULT-LIST.md, sections 3 and 4).
+// The expected rows (bad rows, dropout, repeated timestamps) were found by reading the kit CSV itself.
 // ============================================================
 
 import fs from 'fs';

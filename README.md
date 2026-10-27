@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/32410138/README.md)
 # Mobile Crane Digital Twin
 
 An interactive web-based **Mobile Crane Digital Experience + Digital Twin Simulator** built as a college engineering visualization project.
@@ -624,13 +623,17 @@ node test_stability.mjs
 
 ## Cycle 3 — how to run
 
-# From the repository root:
+From the repository root:
 
     python -m http.server 8000
 
 Open http://localhost:8000/Cycle-3/simulator.html
 
-Tests (Node):
+Tests (Node): all test files of Cycle 2 and Cycle 3, one table, must all pass before every push:
+
+    node Cycle-3/js/run_all_tests.mjs
+
+Or one at a time:
 
     node Cycle-3/js/test_playbackClock.mjs
     node Cycle-3/js/test_failureDetector.mjs
