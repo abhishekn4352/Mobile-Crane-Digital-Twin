@@ -542,18 +542,15 @@ craneStateFor(sample)     -> all of the above in one call
 | 6 | `craneStateFor` returns capacity, utilisation, verdict, CoG, pads and polygon together; `F5` returns `null` capacity and `null` utilisation | PASS |
 | 7 | Single source of truth: `failureDetector.js` imports `./craneModel.js`, has no direct Cycle 2 import, no local CoG / chart / spread copy, and no other Cycle 3 file reaches past Module 3 | PASS |
 
-Run the whole suite:
+Run the whole suite (every test file of Cycle 2 and Cycle 3, one table):
 
 ```bash
-cd Cycle-3/js
-node test_craneModel.mjs
-node test_failureDetector.mjs
-node test_telemetry.mjs
-node test_playbackClock.mjs
-node test_playback_failure_integration.mjs
+node Cycle-3/js/run_all_tests.mjs
 ```
 
-Latest run: **83 passed, 0 failed** for Module 3; the Module 1, Module 2 and integration suites still pass, and the full-recording alarm counts are unchanged by this module (1,019 alarm instances over 707 flagged samples, out of 39,301 rows).
+Module 3 alone: `node Cycle-3/js/test_craneModel.mjs`.
+
+Latest run: **86 passed, 0 failed** for Module 3; the Module 1, Module 2 and integration suites still pass, and the full-recording alarm counts are unchanged by this module (1,019 alarm instances over 707 flagged samples, out of 39,301 rows).
 
 ### 9. Module Integration
 
@@ -616,6 +613,7 @@ classification table.
 Notes on the two integration rows:
 
 * The Failure Detector also imports `KIT` and `radiusFromAngle()` from the same module: `KIT` for the kit constants in its validation rules and `radiusFromAngle()` for the radius-consistency check. Its deployment-dependent pad rules are gated on `padReactionsFor(sample).deployed`, and it exposes the twin's computed reactions as `derived.padsModel` next to the recorded `derived.pads`, so recorded and modelled pads can be compared.
+* Shared limits: `KIT` and `SAFETY_LIMITS` in `craneModel.js` hold every limit the detector, the data-quality rules and the panel share (hook minimum and tolerance, radius and pad-sum tolerances, 0-85 degree boom angle, 0.3 m/s, 2 deg/s and 3 deg/s motion rates, pad lift-off and near-lift-off values, frozen-sensor bits and time), and `expectedHookHeightM()` is the one hook-height formula. `SAFETY_LIMITS` is the review's "KIT" limits object; the name stayed so as not to rename it in three files.
 * The four names in the Sensor Panel row are exactly what `craneModel.js` exports for Module 4 — none of them is renamed or duplicated anywhere in Cycle 3. Panel wiring itself lives in Module 4.
 
 ---
