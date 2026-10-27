@@ -18,7 +18,6 @@ import {
 // A non-finite deployed pad is a data-quality issue (invalidPads), not confirmed lift-off.
 const PAD_LIFT_OFF_T = KIT.PAD_LIFT_OFF_T;
 const PAD_NEAR_LIFT_T = KIT.PAD_NEAR_LIFT_T;
-const PAD_SUM_TOLERANCE = 3;
 
 
 const finite = value => Number.isFinite(value);
@@ -52,7 +51,7 @@ function validPreviousTelemetryForRates(telemetry) {
   if (loadT < 0 || boomAngleDeg < SAFETY_LIMITS.angleMinDeg || boomAngleDeg > SAFETY_LIMITS.angleMaxDeg) return false;
 
   const expectedRadius = radiusFromAngle(boomLengthM, boomAngleDeg, KIT.PIVOT_OFFSET_M);
-  if (Math.abs(radiusM - expectedRadius) > 1) return false;
+  if (Math.abs(radiusM - expectedRadius) > SAFETY_LIMITS.radiusTolM) return false;
 
   if (finite(telemetry.hook_height_m)) {
     const expectedHeight = expectedHookHeightM(boomLengthM, boomAngleDeg);
@@ -62,7 +61,7 @@ function validPreviousTelemetryForRates(telemetry) {
   if (telemetry.outrigger_state === 'DEPLOYED') {
     const pads = [telemetry.pad_fl_t, telemetry.pad_fr_t, telemetry.pad_rl_t, telemetry.pad_rr_t];
     if (pads.some(value => !finite(value))) return false;
-    if (Math.abs(pads.reduce((sum, value) => sum + value, 0) - (KIT.MACHINE_MASS_T + loadT)) > PAD_SUM_TOLERANCE) {
+    if (Math.abs(pads.reduce((sum, value) => sum + value, 0) - (KIT.MACHINE_MASS_T + loadT)) > SAFETY_LIMITS.padSumTolT) {
       return false;
     }
   }
@@ -109,7 +108,7 @@ function validationErrors(telemetry, previousTelemetry) {
 
   if (finite(boomLengthM) && finite(boomAngleDeg) && finite(radiusM)) {
     const expectedRadius = radiusFromAngle(boomLengthM, boomAngleDeg, KIT.PIVOT_OFFSET_M);
-    if (Math.abs(radiusM - expectedRadius) > 1) {
+    if (Math.abs(radiusM - expectedRadius) > SAFETY_LIMITS.radiusTolM) {
       errors.push(`radius ${radiusM} m is inconsistent with boom geometry (${expectedRadius.toFixed(2)} m)`);
     }
   }
@@ -128,11 +127,11 @@ function validationErrors(telemetry, previousTelemetry) {
         errors.push(`boom telescope rate exceeds ${SAFETY_LIMITS.telescopeMps} m/s`);
       }
       if (finite(previousTelemetry.boom_angle_deg) && finite(boomAngleDeg) &&
-          Math.abs(boomAngleDeg - previousTelemetry.boom_angle_deg) / seconds > 2) {
+          Math.abs(boomAngleDeg - previousTelemetry.boom_angle_deg) / seconds > SAFETY_LIMITS.luffDps) {
         errors.push(`luff rate exceeds ${SAFETY_LIMITS.luffDps} degrees/s`);
       }
       if (finite(previousTelemetry.slew_deg) && finite(slewDeg) &&
-          signedAngleDelta(slewDeg, previousTelemetry.slew_deg) / seconds > 3) {
+          signedAngleDelta(slewDeg, previousTelemetry.slew_deg) / seconds > SAFETY_LIMITS.slewDps) {
         errors.push(`slew rate exceeds ${SAFETY_LIMITS.slewDps} degrees/s`);
       }
     }
@@ -145,7 +144,7 @@ function validationErrors(telemetry, previousTelemetry) {
       Math.abs(
         pads.reduce((sum, value) => sum + value, 0) -
         (KIT.MACHINE_MASS_T + loadT)
-      ) > PAD_SUM_TOLERANCE) {
+      ) > SAFETY_LIMITS.padSumTolT) {
       errors.push('deployed pad reactions do not balance the 170 t kit plus load');
     }
   }

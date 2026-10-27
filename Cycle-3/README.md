@@ -9,8 +9,8 @@
 | Outrigger geometry | Manufacturer PDF, page 13; `js/craneModel.js` | Verified: X = 7.8 m, Z = 8.95 m; pads X ±3.9 m, Z ±4.475 m |
 | Stability, pad reactions, alarms, data quality | Cycle 3 model and detector rules | Computed from the current implementation and tested |
 | Manual controls and wind sway | Cycle 3 UI assumptions | Simulated or visual-only; not manufacturer telemetry |
-| Frozen-sensor detection | `createProductionFrozenSensorTracker()` in `js/dataQuality.js` and the sequential panel path | Enabled for the documented provisional mappings; the sensor-to-motion mapping and 3 s interval remain TEAM assumptions pending authoritative confirmation |
-| Critical / near-lift-off thresholds | `KIT.PAD_LIFT_OFF_T` and `KIT.PAD_NEAR_LIFT_T` in `js/craneModel.js` | 0.1 t is the mentor-requested critical boundary; 5 t remains the existing warning rule; neither is claimed as manufacturer-approved |
+| Frozen-sensor detection | `createProductionFrozenSensorTracker()` in `js/dataQuality.js`; numbers in `KIT.FROZEN_SENSOR_*` (`js/craneModel.js`); evidence in `evidence/frozen-and-noise-evidence.mjs` | Rule, tested by injecting a stuck sensor into copies of real rows: the recording itself has no frozen sensor. A sensor is frozen when its reading stays exactly the same for 10 s while its own status bit is set and another axis keeps moving. Bits from sir's kit README §3 and checked on the data (while bit 1 or 3 is set, boom length and slew change on every row; boom angle on 97.6 %). The 11 stretches with bits 1-3 set but no axis moving are held lifts, not frozen sensors. 10 s = five times the longest ordinary stall (2 s). Shown as a data problem (STALE), never as a crane failure |
+| Critical / near-lift-off thresholds | `KIT.PAD_LIFT_OFF_T` and `KIT.PAD_NEAR_LIFT_T` in `js/craneModel.js` | 0.1 t critical boundary (the review asked for about 0.1 t), taken from the pad sensor noise: 127,196 pad readings differ from the kit reaction formula by sigma 0.0034 t and at most 0.0243 t (the column has a 0.01 t step), so 0.1 t is four times the largest noise error and noise alone never raises it. The lowest pad on any other loaded row is 17.4 t; the real event reads 0.02 t (10:25:27, 10:25:28). 5 t is the existing near-lift-off warning. Neither value is manufacturer-approved |
 
 ## Module 1 — Playback & Clock
 
@@ -188,7 +188,12 @@ calculations rather than duplicating those calculations.
   `OUTRIGGER_LIFT_OFF`; a finite reaction above 0.1 t and below 5 t produces
   warning `OUTRIGGER_NEAR_LIFT_OFF`. Missing or non-finite reactions produce
   `DATA_QUALITY`, not a confirmed lift-off. These are team/model thresholds,
-  with 0.1 t requested by the mentor and not claimed as manufacturer-approved.
+  with about 0.1 t requested by the review and not claimed as manufacturer-approved.
+  Justification from the pad sensor noise: the pad readings differ from the kit reaction formula by
+  sigma 0.0034 t and at most 0.0243 t over 127,196 readings (the column has a 0.01 t step), so a pad that
+  carries nothing can read up to about 0.025 t. 0.1 t is four times that largest error, so noise alone never
+  raises lift-off. The lowest pad on any other loaded row is 17.4 t, and the real event reads 0.02 t
+  (10:25:27 and 10:25:28), so no valid loaded row is called lift-off by mistake.
 
 ### Hydraulic and deployment rules
 
@@ -207,22 +212,34 @@ calculations rather than duplicating those calculations.
 ### Status bits and data quality
 
 - The shared `statusBitSet()` helper in `js/craneModel.js` is the only status-word decoder.
-  The detector and panel use it for the existing device bits. Bits 0–3 are verified
-  only as a coarse motion-active group for the outrigger-deployment rule; the
-  repository does not identify which bit belongs to boom telescope, luff, slew,
-  hoist, or another sensor.
-- Frozen-sensor detection is enabled in the production panel/data-quality path.
-  `createFrozenSensorTracker()` accepts an explicit bit-to-field mapping and
-  duration, then safely resets on inactive motion, value changes, invalid values,
-  invalid/duplicate timestamps, and gaps, and emits one `FROZEN_SENSOR` issue per
-  continuing candidate. The production factory uses only the provisional
-  one-to-one mappings in `KIT.FROZEN_SENSOR_MAPPINGS` (boom length → bit 0,
-  boom angle → bit 1, slew → bit 2) and the 3 s TEAM interval.
-- The supplied CSV contains status values and event labels but no authoritative
-  mapping from bits 0–3 to sensor fields and no approved frozen interval/noise
-  threshold. The provisional configuration deliberately does not assume every
-  sensor changes for every active motion bit. Mentor/module-owner confirmation
-  is still required before treating those mappings or duration as verified.
+  The detector and panel use it for the device bits. The motion bits are those of sir's kit
+  `README-for-students.md` §3: bit 0 hoist running, bit 1 telescope running, bit 2 luff running,
+  bit 3 slew running (bit 4 outriggers fully set, 6 wind alert, 7 LMI overload, 8 LMI
+  pre-warning, 9 A2B, 12 LMI bypass). The outrigger-deployment rule uses bits 0-3 together as
+  "any motion".
+- Frozen-sensor detection is in the data-quality path (`js/dataQuality.js`, Module 4), not in the
+  failure detector. A sensor is reported as frozen when (1) its reading stays exactly the same for
+  `KIT.FROZEN_SENSOR_DURATION_S` = 10 s, (2) its own status bit is set (`KIT.FROZEN_SENSOR_MAPPINGS`: boom
+  length -> bit 1, boom angle -> bit 2, slew -> bit 3) and (3) another axis keeps moving (it changed on at
+  least `KIT.FROZEN_SENSOR_MOVING_FRACTION` = half of those 10 s). The tracker resets on a clear bit, a
+  missing value, an invalid or repeated timestamp and a gap. It reports a STALE issue on every row while the
+  freeze lasts; it is not `BAD DATA`, which would hide the real crane alarm on that row.
+- What the data says about the bits and the duration (`evidence/frozen-and-noise-evidence.mjs`):
+  outside the held lifts, whenever bit 1 or bit 3 is set the boom length or slew reading changes on every
+  row (7,844 and 7,866 rows), and bit 2 goes with the boom angle on 97.6 % of 7,844 rows (the rest are stalls
+  of at most 2 s). Bits 1, 2 and 3 come on and off together. So the bits in the kit README are right, but a
+  set bit is not enough: in 11 stretches (31 to 241 s) bits 1-3 are set and boom length, angle and slew do not
+  change at all. These are held lifts (the crane holds the boom and carries a load; the generator leaves the
+  motion bits on). A rule that only looks at the bit reports them as frozen sensors, and the first version of
+  ours did. Requiring that another axis is moving silences them. The duration only has to be longer than the
+  longest ordinary stall (2 s): every value from 3 s to 60 s gives zero frozen sensors on the recording, 2 s
+  gives 20 false episodes. We use 10 s, five times the longest stall.
+- The recording contains no sensor that is stuck while another axis moves, so the rule reports nothing on
+  it. It is tested by injecting a stuck boom length, boom angle or slew into copies of real rows (reported
+  10 s after the freeze starts, on that channel only; a 9 s freeze and a freeze across a dropout are silent).
+  Limits: three axes stuck together look like a held lift and are not reported; a stuck sensor while no other
+  axis moves is not reported; a stuck load, pressure, pad or wind reading is not watched (no motion bit
+  belongs to them).
 - Status word bit 7 produces `DEVICE_OVERLOAD` when set and no calculated
   `OVERLOAD` is already present.
 - Status word bit 8, or computed utilization from 90% up to but below
@@ -288,6 +305,7 @@ is run against the supplied recording:
 | 09:00:00 | Overload | Load exceeds rated chart capacity | `OVERLOAD` |
 | 09:50:00 | Overload with LMI under-reading | Load remains over capacity and device LMI diverges from computed utilization | `OVERLOAD` and `LMI_DIVERGENCE` |
 | 10:25:20 | Front-left pad near lift-off | FL pad reaction is below 5 t | `OUTRIGGER_NEAR_LIFT_OFF` |
+| 10:25:27 | Front-left pad lift-off (also 10:25:28) | Deployed pad reaction at or below 0.1 t (0.02 t in the recording) | `OUTRIGGER_LIFT_OFF` |
 | 11:00:00 | Severe overload | Load exceeds rated chart capacity | `OVERLOAD` |
 | 11:00:01 | Hydraulic pressure loss | Pressure is below 95% of expected pressure | `HYDRAULIC_PRESSURE_LOSS` |
 | 12:18:40 | Load on a not-permitted chart combination | Valid chart inputs return no permitted capacity | `NOT_PERMITTED` |
@@ -314,6 +332,8 @@ failures:
 | 17:00:00 | Invalid angle and inconsistent geometry | `DATA_QUALITY`; normal failure classification stops |
 
 ## 8. Missed Faults and Limitations
+
+Frozen sensors are not detected by this module but by `dataQuality.js` (Module 4). The recording has none: the 11 stretches where bits 1-3 are set and the readings do not change are held lifts (see Status bits and data quality above and `evidence/frozen-and-noise-evidence.mjs`).
 
 Module 2 does not independently detect timestamp or data-stream
 continuity faults:
